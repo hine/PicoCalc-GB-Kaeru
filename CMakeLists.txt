@@ -21,12 +21,16 @@ add_executable(picocalc_gb_kaeru
     src/video/video_lcd.c
     src/input/input_keyboard.c
     src/storage/storage_sd.c
+    src/storage/rom_flash.c
+    emu/gb/gb_core.c
     hw_config.c
 )
 
 target_include_directories(picocalc_gb_kaeru PRIVATE
     src
+    emu
     lib/no-OS-FatFS-SD-SPI-RPi-Pico/FatFs_SPI/include
+    lib/peanut-gb
     compat   # hardware/rtc.h stub for RP2350 (removed in SDK)
 )
 
@@ -34,6 +38,8 @@ target_link_libraries(picocalc_gb_kaeru
     pico_stdlib
     hardware_spi
     hardware_i2c
+    hardware_flash
+    hardware_sync
     FatFs_SPI
 )
 

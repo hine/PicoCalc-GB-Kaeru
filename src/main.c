@@ -4,6 +4,10 @@
 #include "video/video_lcd.h"
 #include "input/input_keyboard.h"
 #include "storage/storage_sd.h"
+#include "storage/rom_flash.h"
+#include "gb/gb_core.h"
+
+#define ROM_PATH "/roms/kaeru.gb"
 
 int main()
 {
@@ -11,13 +15,10 @@ int main()
 
     lcd_init();
     lcd_clear();
-    lcd_print_string("PicoCalc SD Test\n\n");
+    lcd_print_string("PicoCalc GB Kaeru\n\n");
 
     kbd_init();
 
-    // SD マウントを直接リトライ。
-    // USB のみ起動時は PicoCalc 電源 ON まで失敗し続け、
-    // PicoCalc 電源起動時は起動直後の不安定期を過ぎれば成功する。
     lcd_print_string("Mounting SD");
     int fr = FR_NOT_READY;
     while (fr != FR_OK) {
@@ -28,16 +29,38 @@ int main()
     }
     lcd_print_string("Mount OK\n\n");
 
-    lcd_print_string("Files in /:\n");
-    char buf[512];
-    if (sd_list_root(buf, sizeof(buf))) {
+    // ROM をフラッシュへ（変更がなければスキップ）
+    int rc = rom_flash_ensure(ROM_PATH);
+    if (rc != 0) {
+        char buf[40];
+        snprintf(buf, sizeof(buf), "Flash FAILED: %d\n", rc);
         lcd_print_string(buf);
-    } else {
-        lcd_print_string("(list failed)\n");
+        while (true) tight_loop_contents();
     }
 
+    // SD はもう不要
     sd_unmount();
 
-    lcd_print_string("\nDone.\n");
-    while (true) tight_loop_contents();
+    lcd_print_string("Starting emulator...\n");
+    rc = gb_core_init();
+    if (rc != 0) {
+        char buf[40];
+        snprintf(buf, sizeof(buf), "GB init FAILED: %d\n", rc);
+        lcd_print_string(buf);
+        while (true) tight_loop_contents();
+    }
+
+    gb_core_set_joypad(0xFF);
+
+    lcd_print_string("Running\n");
+    uint32_t frame = 0;
+    while (true) {
+        gb_core_run_frame();
+        frame++;
+        if (frame % 60 == 0) {
+            char buf[24];
+            snprintf(buf, sizeof(buf), "F:%lu\n", (unsigned long)frame);
+            lcd_print_string(buf);
+        }
+    }
 }

@@ -9,8 +9,7 @@
 **Milestone 1: PicoCalc 基本I/O** — LCD Hello World・キーボード入力 実機確認済み
 
 次のアクション：
-- [ ] スピーカー簡易出力（任意）またはスキップして Milestone 2 へ
-- [ ] GBエミュレーションコア選定・組み込み（Peanut-GB 有力）
+- [ ] GB 画面（160×144）を LCD へ表示（Milestone 3）
 
 ---
 
@@ -36,14 +35,13 @@
 - [x] SDカード読み込み確認（実機確認済み 2026-05-22）
 - [ ] スピーカー簡易出力
 
-### Milestone 2: GBコア組み込み ⬜ 未着手
+### Milestone 2: GBコア組み込み ✅ 完了
 
-- [ ] GBエミュレーションコア選定
-- [ ] Peanut-GB / Walnut-CGB 評価
-- [ ] emu 層構成決定
-- [ ] ROM 読み込み
-- [ ] CPU 実行
-- [ ] 映像バッファ取得
+- [x] GBエミュレーションコア選定（Peanut-GB 採用）
+- [x] emu 層構成決定（`emu/gb/gb_core.c`）
+- [x] ROM 読み込み（初回起動時に Flash へ書き込み、XIP で直読み）
+- [x] CPU 実行（実機 ~60fps 確認済み 2026-05-22）
+- [x] 映像バッファ取得（`gb_fb[144][160]` に lcd_draw_line コールバックで蓄積）
 
 ### Milestone 3: 画面表示 ⬜ 未着手
 
@@ -99,6 +97,8 @@
 | 2026-05-22 | RTC は no-op スタブで対処（`compat/hardware/rtc.h`）。Milestone 6 までに再検討 | 下記「RTCに関する調査・経緯」参照 |
 | 2026-05-22 | USB stdio を無効化（`pico_enable_stdio_usb 0`） | TinyUSB が SPI0/DMA と競合し SD マウント失敗するため |
 | 2026-05-22 | `kbd_wait_power()` を廃止し `sd_mount()` リトライループで代替 | PicoCalc 同時起動時に KB コントローラの I2C stuck bus が発生し永久待機になるため。SD マウント自体を直接リトライする方が堅牢 |
+| 2026-05-22 | ROM を Flash XIP で提供（`src/storage/rom_flash.c`） | SD バンク読み込みが 1 フレームに 8 回発生し 7.5fps 止まりだったため。Flash XIP に切替後 ~60fps 達成 |
+| 2026-05-22 | GBエミュレーションコアは Peanut-GB（ヘッダオンリー）を採用 | 軽量・移植性高い・RP2350 実績あり |
 
 ---
 
