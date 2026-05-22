@@ -51,6 +51,20 @@ sudo apt install -y \
   picocom
 ```
 
+## 2.1 pyenv による Python 環境構築
+
+pyenv を利用する場合、apt の python3-pip / python3-venv / python3-setuptools / python3-wheel は補助的な導入にとどめ、プロジェクト用 virtualenv を以下のように構築する。
+
+```
+pyenv virtualenv 3.13.13 picocalc_gb_kaeru
+pyenv local picocalc_gb_kaeru
+pip install --upgrade pip
+pip install wheel
+pip install setuptools
+```
+
+`pyenv local` によりプロジェクトディレクトリに `.python-version` が生成され、以降そのディレクトリに入ると自動的に `picocalc_gb_kaeru` 環境に切り替わる。
+
 ---
 
 # 3. 作業ディレクトリ作成
@@ -180,25 +194,25 @@ cmake_minimum_required(VERSION 3.13)
 
 include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
 
-project(picocalc_gb C CXX ASM)
+project(picocalc_gb_kaeru C CXX ASM)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
 
 pico_sdk_init()
 
-add_executable(picocalc_gb
+add_executable(picocalc_gb_kaeru
     src/main.c
 )
 
-target_link_libraries(picocalc_gb
+target_link_libraries(picocalc_gb_kaeru
     pico_stdlib
 )
 
-pico_add_extra_outputs(picocalc_gb)
+pico_add_extra_outputs(picocalc_gb_kaeru)
 
-pico_enable_stdio_usb(picocalc_gb 1)
-pico_enable_stdio_uart(picocalc_gb 0)
+pico_enable_stdio_usb(picocalc_gb_kaeru 1)
+pico_enable_stdio_uart(picocalc_gb_kaeru 0)
 
 EOF
 ```
