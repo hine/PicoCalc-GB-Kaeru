@@ -1,38 +1,8 @@
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
-#include "hardware/gpio.h"
 #include "input_keyboard.h"
 
 static uint8_t kbd_inited = 0;
-
-// I2C stuck bus リカバリ（I2C spec §3.1.16）
-// スレーブが SDA を Low に保持している場合、SCL を GPIO で最大 9 パルス出力して解放する。
-static void i2c_bus_recover(void) {
-    gpio_init(I2C_KBD_SCL);
-    gpio_set_dir(I2C_KBD_SCL, GPIO_OUT);
-    gpio_put(I2C_KBD_SCL, 1);
-    gpio_init(I2C_KBD_SDA);
-    gpio_set_dir(I2C_KBD_SDA, GPIO_IN);
-    gpio_pull_up(I2C_KBD_SDA);
-    sleep_us(50);  // プルアップが充電されるのを待つ
-
-    // SDA が HIGH なら stuck していない → 何もしない
-    // gpio_init は出力レジスタを 0 にするため、ここで return せずに
-    // gpio_set_dir(OUT) を呼ぶと SDA が即 LOW になりコントローラが混乱する
-    if (gpio_get(I2C_KBD_SDA)) return;
-
-    // SDA が stuck (LOW)。SCL を最大 9 パルス出力して解放を試みる。
-    for (int i = 0; i < 9; i++) {
-        gpio_put(I2C_KBD_SCL, 0); sleep_us(50);
-        gpio_put(I2C_KBD_SCL, 1); sleep_us(50);
-        if (gpio_get(I2C_KBD_SDA)) break;
-    }
-
-    // START + STOP でスレーブのステートマシンをリセット
-    gpio_set_dir(I2C_KBD_SDA, GPIO_OUT);
-    gpio_put(I2C_KBD_SDA, 0); sleep_us(50);  // SDA LOW (SCL HIGH) = START
-    gpio_put(I2C_KBD_SDA, 1); sleep_us(50);  // SDA HIGH (SCL HIGH) = STOP
-}
 
 void kbd_wait_power(void) {
     uint8_t msg = 0x09;
@@ -58,10 +28,12 @@ void kbd_init(void) {
     kbd_inited = 1;
 }
 
+// Core 1 から呼ぶこと。KB コントローラの応答を待ってから kbd_inited を立てる。
+// Core 0（GB エミュレータ）と並走するため、どれだけ待っても画面描画には影響しない。
 void kbd_wait_ready(void) {
     uint8_t msg = 0x09;
     for (;;) {
-        i2c_bus_recover();  // SDA stuck low を解放してから再初期化
+        // タイムアウト後の I2C 内部状態をリセットしてから再試行する
         i2c_init(I2C_KBD_MOD, I2C_KBD_SPEED);
         gpio_set_function(I2C_KBD_SCL, GPIO_FUNC_I2C);
         gpio_set_function(I2C_KBD_SDA, GPIO_FUNC_I2C);
@@ -69,7 +41,7 @@ void kbd_wait_ready(void) {
         gpio_pull_up(I2C_KBD_SDA);
         if (i2c_write_timeout_us(I2C_KBD_MOD, I2C_KBD_ADDR, &msg, 1, false, 100000) >= 0)
             break;
-        sleep_ms(200);
+        sleep_ms(500);
     }
     kbd_inited = 1;
 }
