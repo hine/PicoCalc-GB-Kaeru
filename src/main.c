@@ -9,6 +9,9 @@
 
 #define ROM_PATH "/roms/kaeru.gb"
 
+// ダブルバッファ: gb_fb (gb_core.c 定義) と交互に使う
+static uint8_t gb_fb_b[GB_SCREEN_H][GB_SCREEN_W];
+
 int main()
 {
     stdio_init_all();
@@ -51,16 +54,23 @@ int main()
     }
 
     gb_core_set_joypad(0xFF);
+    lcd_gb_dma_init();
+    lcd_clear();
 
-    lcd_print_string("Running\n");
-    uint32_t frame = 0;
+    // 最初の 1 フレームを gb_fb へ描画してから DMA ループへ入る
+    gb_core_run_frame();
+
     while (true) {
+        // gb_fb を DMA 転送しながら、次フレームを gb_fb_b へエミュレート
+        lcd_gb_frame_start(gb_fb);
+        gb_core_set_fb(gb_fb_b);
         gb_core_run_frame();
-        frame++;
-        if (frame % 60 == 0) {
-            char buf[24];
-            snprintf(buf, sizeof(buf), "F:%lu\n", (unsigned long)frame);
-            lcd_print_string(buf);
-        }
+        lcd_gb_frame_wait();
+
+        // gb_fb_b を DMA 転送しながら、次フレームを gb_fb へエミュレート
+        lcd_gb_frame_start(gb_fb_b);
+        gb_core_set_fb(gb_fb);
+        gb_core_run_frame();
+        lcd_gb_frame_wait();
     }
 }

@@ -20,3 +20,6 @@ void gb_core_run_frame(void);
 // JOYPAD_* 定数のビット OR で指定。0 = 押下、1 = 未押下。
 // 初期値はすべて未押下 (0xFF)。
 void gb_core_set_joypad(uint8_t joypad);
+
+// lcd_line_cb が書き込む先のフレームバッファを切り替える（ダブルバッファ用）。
+void gb_core_set_fb(uint8_t (*fb)[GB_SCREEN_W]);

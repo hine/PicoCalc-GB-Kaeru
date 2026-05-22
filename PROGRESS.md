@@ -6,10 +6,10 @@
 
 ## 現在のフォーカス
 
-**Milestone 1: PicoCalc 基本I/O** — LCD Hello World・キーボード入力 実機確認済み
+**Milestone 3: 画面表示** — ~60fps DMA ダブルバッファ表示 実機確認済み
 
 次のアクション：
-- [ ] GB 画面（160×144）を LCD へ表示（Milestone 3）
+- [ ] Milestone 4: 十字キー・A/B/Start/Select 入力対応
 
 ---
 
@@ -43,10 +43,10 @@
 - [x] CPU 実行（実機 ~60fps 確認済み 2026-05-22）
 - [x] 映像バッファ取得（`gb_fb[144][160]` に lcd_draw_line コールバックで蓄積）
 
-### Milestone 3: 画面表示 ⬜ 未着手
+### Milestone 3: 画面表示 ✅ 完了
 
-- [ ] 160×144 画面を LCD へ表示
-- [ ] フレーム更新ループ
+- [x] 160×144 画面を LCD へ表示（1x, 中央配置 x=80, y=88 実機確認済み 2026-05-22）
+- [x] フレーム更新ループ（DMA ダブルバッファで ~60fps 達成 2026-05-22）
 - [ ] 簡易 FPS 計測
 
 ### Milestone 4: 入力対応 ⬜ 未着手
@@ -98,6 +98,7 @@
 | 2026-05-22 | USB stdio を無効化（`pico_enable_stdio_usb 0`） | TinyUSB が SPI0/DMA と競合し SD マウント失敗するため |
 | 2026-05-22 | `kbd_wait_power()` を廃止し `sd_mount()` リトライループで代替 | PicoCalc 同時起動時に KB コントローラの I2C stuck bus が発生し永久待機になるため。SD マウント自体を直接リトライする方が堅牢 |
 | 2026-05-22 | ROM を Flash XIP で提供（`src/storage/rom_flash.c`） | SD バンク読み込みが 1 フレームに 8 回発生し 7.5fps 止まりだったため。Flash XIP に切替後 ~60fps 達成 |
+| 2026-05-22 | LCD 表示を 1x スケール + DMA ダブルバッファに変更 | 2x ブロッキング転送(276KB@25MHz)が 88ms/frame で 6-10fps だったため。1x(69KB@37.5MHz) + DMA で ~60fps 達成 |
 | 2026-05-22 | GBエミュレーションコアは Peanut-GB（ヘッダオンリー）を採用 | 軽量・移植性高い・RP2350 実績あり |
 
 ---

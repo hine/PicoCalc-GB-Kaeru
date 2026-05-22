@@ -5,6 +5,7 @@
 #include <stdio.h>
 
 #include <hardware/spi.h>
+#include "hardware/dma.h"
 #include "hardware/timer.h"
 #include "pico/stdlib.h"
 
@@ -197,6 +198,55 @@ static void display_put_c(char c) {
 
 void lcd_print_string(const char *s) {
     while (*s) display_put_c(*s++);
+}
+
+// GB DMG クラシックグリーンパレット（RGB666 各 8bit で送信）
+static const uint8_t dmg_palette[4][3] = {
+    {0x9B, 0xBC, 0x0F},
+    {0x8B, 0xAC, 0x0F},
+    {0x30, 0x62, 0x30},
+    {0x0F, 0x38, 0x0F},
+};
+
+// DMA 転送用バッファ: 160×144×3 = 69120 bytes
+static uint8_t lcd_gb_buf[144 * 160 * 3];
+static int     lcd_dma_chan = -1;
+static dma_channel_config lcd_dma_cfg;
+
+void lcd_gb_dma_init(void) {
+    lcd_dma_chan = dma_claim_unused_channel(true);
+    lcd_dma_cfg  = dma_channel_get_default_config(lcd_dma_chan);
+    channel_config_set_transfer_data_size(&lcd_dma_cfg, DMA_SIZE_8);
+    channel_config_set_dreq(&lcd_dma_cfg, spi_get_dreq(Pico_LCD_SPI_MOD, true));
+    channel_config_set_read_increment(&lcd_dma_cfg, true);
+    channel_config_set_write_increment(&lcd_dma_cfg, false);
+}
+
+// パレット展開 → DMA 転送開始（非ブロッキング）
+void lcd_gb_frame_start(const uint8_t fb[144][160]) {
+    uint8_t *dst = lcd_gb_buf;
+    for (int y = 0; y < 144; y++) {
+        for (int x = 0; x < 160; x++) {
+            const uint8_t *c = dmg_palette[fb[y][x] & 3];
+            *dst++ = c[0];
+            *dst++ = c[1];
+            *dst++ = c[2];
+        }
+    }
+    // 160×144 を 320×320 LCD の中央に配置: x=80, y=88
+    define_region_spi(80, 88, 239, 231, 1);
+    dma_channel_configure(lcd_dma_chan, &lcd_dma_cfg,
+                          &spi_get_hw(Pico_LCD_SPI_MOD)->dr,
+                          lcd_gb_buf,
+                          sizeof(lcd_gb_buf),
+                          true);
+}
+
+// DMA 完了待ち・SPI / CS 後処理
+void lcd_gb_frame_wait(void) {
+    dma_channel_wait_for_finish_blocking(lcd_dma_chan);
+    spi_finish(Pico_LCD_SPI_MOD);
+    lcd_spi_raise_cs();
 }
 
 void lcd_clear(void) {

@@ -40,6 +40,7 @@ target_link_libraries(picocalc_gb_kaeru
     hardware_i2c
     hardware_flash
     hardware_sync
+    hardware_dma
     FatFs_SPI
 )
 

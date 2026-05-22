@@ -3,7 +3,7 @@
 
 #include <hardware/spi.h>
 
-#define LCD_SPI_SPEED   25000000
+#define LCD_SPI_SPEED   50000000
 
 #define Pico_LCD_SCK 10
 #define Pico_LCD_TX  11
@@ -81,5 +81,12 @@ extern void lcd_init(void);
 extern void lcd_clear(void);
 extern void reset_controller(void);
 extern void pin_set_bit(int pin, unsigned int offset);
+
+// DMA チャンネルを確保して初期化する（起動時に一度だけ呼ぶ）
+extern void lcd_gb_dma_init(void);
+// fb の内容を LCD 用バッファに展開し、DMA 転送を開始する（非ブロッキング）
+extern void lcd_gb_frame_start(const uint8_t fb[144][160]);
+// DMA 転送完了を待ち、SPI / CS を後処理する
+extern void lcd_gb_frame_wait(void);
 
 #endif // VIDEO_LCD_H

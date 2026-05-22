@@ -16,6 +16,13 @@ static rom_ctx_t  ctx;
 
 uint8_t gb_fb[GB_SCREEN_H][GB_SCREEN_W];
 
+// ダブルバッファ用: lcd_line_cb が書き込む先を切り替える
+static uint8_t (*gb_fb_ptr)[GB_SCREEN_W] = gb_fb;
+
+void gb_core_set_fb(uint8_t (*fb)[GB_SCREEN_W]) {
+    gb_fb_ptr = fb;
+}
+
 static uint8_t rom_read_cb(struct gb_s *g, const uint_fast32_t addr)
 {
     return ((const rom_ctx_t *)g->direct.priv)->rom[addr];
@@ -44,8 +51,8 @@ static void lcd_line_cb(struct gb_s *g, const uint8_t *pixels,
                         const uint_fast8_t line)
 {
     (void)g;
-    if (line < LCD_HEIGHT)
-        memcpy(gb_fb[line], pixels, LCD_WIDTH);
+    if (line < GB_SCREEN_H)
+        memcpy(gb_fb_ptr[line], pixels, GB_SCREEN_W);
 }
 
 int gb_core_init(void)
