@@ -100,6 +100,8 @@
 | 2026-05-22 | RTC は no-op スタブで対処（`compat/hardware/rtc.h`）。Milestone 6 までに再検討 | 下記「RTCに関する調査・経緯」参照 |
 | 2026-05-22 | USB stdio を無効化（`pico_enable_stdio_usb 0`） | TinyUSB が SPI0/DMA と競合し SD マウント失敗するため |
 | 2026-05-22 | `kbd_wait_power()` を廃止し `sd_mount()` リトライループで代替 | PicoCalc 同時起動時に KB コントローラの I2C stuck bus が発生し永久待機になるため。SD マウント自体を直接リトライする方が堅牢 |
+| 2026-05-23 | `kbd_init()` を `lcd_init()` より前（main 冒頭）に移動 | standalone 起動時、lcd_init の 240ms+ ウエイト中に STM32 が I2C 初期化する。この時点で SCL/SDA が浮動だと STM32 の I2C が正常起動しない。詳細は HardwareSpec §3.5 |
+| 2026-05-23 | キーボードポーリングを Core 1 の `kbd_wait_ready()` リトライループに移行 | kbd_init 後も STM32 の I2C 起動完了まで数秒かかる。Core 1 でリトライすることで Core 0（GB エミュレータ）をブロックしない |
 | 2026-05-22 | ROM を Flash XIP で提供（`src/storage/rom_flash.c`） | SD バンク読み込みが 1 フレームに 8 回発生し 7.5fps 止まりだったため。Flash XIP に切替後 ~60fps 達成 |
 | 2026-05-22 | LCD 表示を 1x スケール + DMA ダブルバッファに変更 | 2x ブロッキング転送(276KB@25MHz)が 88ms/frame で 6-10fps だったため。1x(69KB@37.5MHz) + DMA で ~60fps 達成 |
 | 2026-05-22 | GBエミュレーションコアは Peanut-GB（ヘッダオンリー）を採用 | 軽量・移植性高い・RP2350 実績あり |
