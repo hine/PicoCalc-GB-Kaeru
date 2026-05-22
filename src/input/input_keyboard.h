@@ -52,6 +52,8 @@ void kbd_wait_power(void);
 
 void kbd_init(void);
 int  kbd_read(void);          // 押下キーの ASCII を返す。なければ -1
+// press/release イベントを返す。戻り値=キーコード(>0)、*pressed=1押下/0離し。イベントなし/-1
+int  kbd_read_event(int *pressed);
 int  kbd_read_battery(void);  // バッテリー残量
 int  kbd_set_backlight(uint8_t val);
 
