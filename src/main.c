@@ -64,6 +64,12 @@ int main()
 {
     stdio_init_all();
 
+    // I2C1 を最初期に初期化：lcd_init() の 240ms+ ウエイト中に KB STM32 が起動するため、
+    // それ以前に SCL/SDA=HIGH (idle I2C バス) を確立しておく必要がある。
+    // standalone 起動では Pico と KB コントローラが同時に起動し、
+    // STM32 は起動直後に自分の I2C を初期化する。この時点で pull-up が必要。
+    kbd_init();
+
     lcd_init();
     lcd_clear();
     lcd_print_string("PicoCalc GB Kaeru\n\n");
