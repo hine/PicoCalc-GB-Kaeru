@@ -6,19 +6,38 @@
 
 static const char *key_name(int c) {
     switch (c) {
-        case KEY_UP:    return "[UP]";
-        case KEY_DOWN:  return "[DOWN]";
-        case KEY_LEFT:  return "[LEFT]";
-        case KEY_RIGHT: return "[RIGHT]";
-        case KEY_ESC:   return "[ESC]";
-        case KEY_ENTER: return "[ENTER]";
+        case KEY_UP:        return "[UP]";
+        case KEY_DOWN:      return "[DOWN]";
+        case KEY_LEFT:      return "[LEFT]";
+        case KEY_RIGHT:     return "[RIGHT]";
+        case KEY_ESC:       return "[ESC]";
+        case KEY_ENTER:     return "[ENTER]";
         case KEY_BACKSPACE: return "[BS]";
-        case KEY_F1:    return "[F1]";
-        case KEY_F2:    return "[F2]";
-        case KEY_F3:    return "[F3]";
-        case KEY_F4:    return "[F4]";
-        case KEY_F5:    return "[F5]";
-        default:        return NULL;
+        case KEY_TAB:       return "[TAB]";
+        case KEY_DEL:       return "[DEL]";
+        case KEY_HOME:      return "[HOME]";
+        case KEY_END:       return "[END]";
+        case KEY_PAGE_UP:   return "[PGUP]";
+        case KEY_PAGE_DOWN: return "[PGDN]";
+        case KEY_INSERT:    return "[INS]";
+        case KEY_BREAK:     return "[BRK]";
+        case KEY_CAPS_LOCK: return "[CAPS]";
+        case KEY_F1:        return "[F1]";
+        case KEY_F2:        return "[F2]";
+        case KEY_F3:        return "[F3]";
+        case KEY_F4:        return "[F4]";
+        case KEY_F5:        return "[F5]";
+        case KEY_F6:        return "[F6]";
+        case KEY_F7:        return "[F7]";
+        case KEY_F8:        return "[F8]";
+        case KEY_F9:        return "[F9]";
+        case KEY_F10:       return "[F10]";
+        case KEY_MOD_ALT:   return "[ALT]";
+        case KEY_MOD_SHL:   return "[LSFT]";
+        case KEY_MOD_SHR:   return "[RSFT]";
+        case KEY_MOD_SYM:   return "[SYM]";
+        case KEY_MOD_CTRL:  return "[CTRL]";
+        default:            return NULL;
     }
 }
 
