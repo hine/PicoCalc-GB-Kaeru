@@ -75,7 +75,7 @@ extern void spi_write_command(unsigned char data);
 extern void spi_write_cd(unsigned char command, int data, ...);
 extern void spi_write_data24(uint32_t data);
 
-extern void lcd_print_string(char *s);
+extern void lcd_print_string(const char *s);
 extern void lcd_spi_init(void);
 extern void lcd_init(void);
 extern void lcd_clear(void);

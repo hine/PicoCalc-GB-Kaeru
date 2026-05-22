@@ -12,11 +12,13 @@ pico_sdk_init()
 add_executable(picocalc_gb_kaeru
     src/main.c
     src/video/video_lcd.c
+    src/input/input_keyboard.c
 )
 
 target_link_libraries(picocalc_gb_kaeru
     pico_stdlib
     hardware_spi
+    hardware_i2c
 )
 
 pico_add_extra_outputs(picocalc_gb_kaeru)

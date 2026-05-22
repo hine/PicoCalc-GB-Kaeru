@@ -195,7 +195,7 @@ static void display_put_c(char c) {
     lcd_print_char(gui_fcolour, gui_bcolour, c, ORIENT_NORMAL);
 }
 
-void lcd_print_string(char *s) {
+void lcd_print_string(const char *s) {
     while (*s) display_put_c(*s++);
 }
 
