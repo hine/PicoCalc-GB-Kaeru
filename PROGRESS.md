@@ -6,10 +6,9 @@
 
 ## 現在のフォーカス
 
-**Milestone 1: PicoCalc 基本I/O** — LCD Hello World 実機確認済み
+**Milestone 1: PicoCalc 基本I/O** — LCD Hello World・キーボード入力 実機確認済み
 
 次のアクション：
-- [ ] platform 層: キーボード ドライバ実装
 - [ ] platform 層: SDカード ドライバ実装
 - [ ] GBエミュレーションコア選定（Peanut-GB vs Walnut-CGB）
 
@@ -33,7 +32,7 @@
 - [x] PicoCalc SDカード 仕様調査（→ `HardwareSpec.md`）
 - [x] 既存 GB エミュレータ実装調査（→ `HardwareSpec.md`）
 - [x] LCD 初期化・Hello World 表示（緑文字で実機確認済み 2026-05-22）
-- [ ] キーボード入力取得
+- [x] キーボード入力取得（実機確認済み 2026-05-22）
 - [ ] SDカード読み込み確認
 - [ ] スピーカー簡易出力
 
