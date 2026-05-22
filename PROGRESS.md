@@ -6,11 +6,11 @@
 
 ## 現在のフォーカス
 
-**Milestone 7: 音声対応**
+**Milestone 9: 携帯機化**
 
 次のアクション：
-- [ ] スピーカー簡易出力（Milestone 1 残項目）
-- [ ] GB APU 出力（Milestone 7）
+- [ ] メニュー UI / LovyanGFX 評価（Milestone 9）
+- [ ] 音声タイミング改善（LovyanGFX 導入後に Core 1 移行または I2S 化）
 
 ---
 
@@ -69,11 +69,12 @@
 - [x] SRAM 保存 / 読み込み
 - [x] SD への保存（30 秒間隔自動セーブ、`/saves/kaeru.sav`、実機確認済み 2026-05-23）
 
-### Milestone 7: 音声対応 ⬜ 未着手
+### Milestone 7: 音声対応 🔄 進行中
 
-- [ ] GB APU 出力
-- [ ] PicoCalc スピーカー再生
+- [x] GB APU 出力（minigb_apu 統合、実機確認済み 2026-05-23）
+- [x] PicoCalc スピーカー再生（PWM 10bit + DMA IRQ ダブルバッファ、実機確認済み 2026-05-23）
 - [ ] 音量調整
+- [ ] 音声タイミング改善（LCD 更新との干渉でテンポが揺れる。LovyanGFX 導入後に Core 1 移行または I2S 化を検討）
 
 ### Milestone 8: GBC 対応 ⬜ 未着手
 

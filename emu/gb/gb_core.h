@@ -41,3 +41,9 @@ size_t   gb_core_save_size(void);
 uint8_t *gb_core_cart_ram_ptr(void);
 bool     gb_core_is_dirty(void);
 void     gb_core_clear_dirty(void);
+
+// 1フレーム分の S16 ステレオインターリーブ音声サンプルを buf へ書き込む。
+// buf は GB_AUDIO_SAMPLES_TOTAL 要素以上の int16_t 配列であること。
+#define GB_AUDIO_SAMPLES      548   // L/R ペア数/フレーム（32768Hz / ~59.73fps）
+#define GB_AUDIO_SAMPLES_TOTAL (GB_AUDIO_SAMPLES * 2)
+void gb_core_fill_audio(int16_t *buf);

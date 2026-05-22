@@ -5,6 +5,50 @@
 
 ---
 
+## [一時保留] Milestone 7: 音声対応 (2026-05-23)
+
+### 設計方針
+
+**Peanut-GB との接続**:
+- `ENABLE_SOUND 1` を `peanut_gb.h` インクルード前に定義
+- `audio_read()` / `audio_write()` を gb_core.c で実装 → minigb_apu に委譲
+- `gb_core_run_frame()` 後に `minigb_apu_audio_callback()` を呼んでサンプル取得
+
+**出力構成**:
+- GP26 = PWM slice 5A（L）、GP27 = PWM slice 5B（R）
+- PWM wrap=255 → キャリア 125MHz/256 ≈ 488kHz（可聴域より十分高い）
+- DMA ペーサー: slice 4 を wrap=3814 で動かし DREQ ≈ 32774Hz を生成
+- DMA が slice 4 DREQ で slice 5 の CC レジスタへサンプルを転送
+- ダブルバッファで CPU 書き込みと DMA 再生を交互に行う
+
+**サンプルフォーマット**（AUDIO_SAMPLE_RATE=32768）:
+- AUDIO_SAMPLES = (unsigned)(32768 / 59.7275) = 548 ペア/フレーム
+- AUDIO_SAMPLES_TOTAL = 1096（S16 インターリーブステレオ）
+- S16 → PWM level: `(sample + 32768) >> 8` で 0-255 に変換
+
+### 実機テスト結果と問題点 (2026-05-23)
+
+- 音は出るが品質が悪い → **原因: wrap=255 (8bit) の低解像度**
+- 画面書き換え中に音が崩れる → **原因: `dma_channel_wait_for_finish_blocking()` がブロックし LCD 更新と干渉**
+
+### 修正方針
+
+1. PWM wrap を 255→1023（10bit）に変更 → キャリア 122kHz、SNR +12dB
+2. `dma_channel_wait_for_finish_blocking()` を廃止し **DMA 完了 IRQ** で即座にバッファ切り替え
+   - volatile `dma_play` で再生中バッファを追跡
+   - IRQ ハンドラ: DMA 完了 → 交互バッファで即再起動 → `buf_needs_fill=true`
+   - `audio_pwm_submit()`: ブロッキングなし、fill 側バッファへ書くだけ
+   - DMA_IRQ_1 を使用（LCD/SD が IRQ_0 を使う可能性があるため）
+
+### 実装ファイル
+
+1. `src/audio/audio_pwm.c/.h` — PWM+DMA 出力ドライバ
+2. `emu/gb/gb_core.c/.h` — minigb_apu 統合、`gb_core_fill_audio()` 追加
+3. `CMakeLists.txt` — minigb_apu.c / audio_pwm.c 追加、hardware_pwm/dma リンク
+4. `src/main.c` — `audio_pwm_init()` と `audio_pwm_submit()` 追加
+
+---
+
 ## [解決済み] Milestone 6: セーブ対応 (2026-05-23)
 
 ### 現状確認

@@ -5,7 +5,16 @@
 #include <stddef.h>
 #include <stdbool.h>
 
-#define ENABLE_LCD 1
+#define MINIGB_APU_AUDIO_FORMAT_S16SYS
+#include "minigb_apu.h"
+
+static struct minigb_apu_ctx apu_ctx;
+
+uint8_t audio_read(uint16_t addr)              { return minigb_apu_audio_read(&apu_ctx, addr); }
+void    audio_write(uint16_t addr, uint8_t val){ minigb_apu_audio_write(&apu_ctx, addr, val); }
+
+#define ENABLE_SOUND 1
+#define ENABLE_LCD   1
 #include "peanut_gb.h"
 
 typedef struct {
@@ -81,7 +90,14 @@ int gb_core_init(void)
         memset(ctx.cart_ram, 0xFF, g_save_size);
     }
 
+    minigb_apu_audio_init(&apu_ctx);
+
     return 0;
+}
+
+void gb_core_fill_audio(int16_t *buf)
+{
+    minigb_apu_audio_callback(&apu_ctx, buf);
 }
 
 size_t gb_core_save_size(void)       { return g_save_size; }

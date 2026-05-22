@@ -23,7 +23,9 @@ add_executable(picocalc_gb_kaeru
     src/storage/storage_sd.c
     src/storage/rom_flash.c
     src/storage/save_sram.c
+    src/audio/audio_pwm.c
     emu/gb/gb_core.c
+    lib/peanut-gb/examples/sdl2/minigb_apu/minigb_apu.c
     hw_config.c
 )
 
@@ -32,6 +34,7 @@ target_include_directories(picocalc_gb_kaeru PRIVATE
     emu
     lib/no-OS-FatFS-SD-SPI-RPi-Pico/FatFs_SPI/include
     lib/peanut-gb
+    lib/peanut-gb/examples/sdl2/minigb_apu
     compat   # hardware/rtc.h stub for RP2350 (removed in SDK)
 )
 
@@ -42,7 +45,13 @@ target_link_libraries(picocalc_gb_kaeru
     hardware_i2c
     hardware_flash
     hardware_sync
+    hardware_pwm
+    hardware_dma
     FatFs_SPI
+)
+
+target_compile_definitions(picocalc_gb_kaeru PRIVATE
+    MINIGB_APU_AUDIO_FORMAT_S16SYS
 )
 
 pico_add_extra_outputs(picocalc_gb_kaeru)

@@ -7,6 +7,7 @@
 #include "storage/storage_sd.h"
 #include "storage/rom_flash.h"
 #include "storage/save_sram.h"
+#include "audio/audio_pwm.h"
 #include "gb/gb_core.h"
 
 #define ROM_PATH  "0:/roms/kaeru.gb"
@@ -96,6 +97,8 @@ int main()
         while (true) tight_loop_contents();
     }
 
+    audio_pwm_init();
+
     lcd_print_string("Starting emulator...\n");
     rc = gb_core_init();
     if (rc != 0) {
@@ -126,6 +129,7 @@ int main()
     lcd_clear();
 
     absolute_time_t last_save = get_absolute_time();
+    static int16_t audio_buf[GB_AUDIO_SAMPLES_TOTAL];
 
     while (true) {
         // フレームタイマーを待ってから実行（フレームレート固定）
@@ -134,6 +138,10 @@ int main()
 
         gb_core_set_joypad(g_joypad);
         gb_core_run_frame();
+
+        gb_core_fill_audio(audio_buf);
+        audio_pwm_submit(audio_buf, GB_AUDIO_SAMPLES);
+
         lcd_gb_frame_delta(gb_fb);
 
         // 30 秒ごとに dirty な cart RAM を SD へ自動セーブ
