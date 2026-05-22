@@ -82,11 +82,8 @@ extern void lcd_clear(void);
 extern void reset_controller(void);
 extern void pin_set_bit(int pin, unsigned int offset);
 
-// DMA チャンネルを確保して初期化する（起動時に一度だけ呼ぶ）
-extern void lcd_gb_dma_init(void);
-// fb の内容を LCD 用バッファに展開し、DMA 転送を開始する（非ブロッキング）
-extern void lcd_gb_frame_start(const uint8_t fb[144][160]);
-// DMA 転送完了を待ち、SPI / CS を後処理する
-extern void lcd_gb_frame_wait(void);
+// GB 画面（160×144）を 2x スケールで LCD に描画する。
+// 前フレームとの差分行のみ転送するため、静的シーンほど高速。
+extern void lcd_gb_frame_delta(const uint8_t fb[144][160]);
 
 #endif // VIDEO_LCD_H

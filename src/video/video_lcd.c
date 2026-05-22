@@ -3,9 +3,9 @@
 #include <stdarg.h>
 #include <ctype.h>
 #include <stdio.h>
+#include <string.h>
 
 #include <hardware/spi.h>
-#include "hardware/dma.h"
 #include "hardware/timer.h"
 #include "pico/stdlib.h"
 
@@ -208,45 +208,51 @@ static const uint8_t dmg_palette[4][3] = {
     {0x0F, 0x38, 0x0F},
 };
 
-// DMA 転送用バッファ: 160×144×3 = 69120 bytes
-static uint8_t lcd_gb_buf[144 * 160 * 3];
-static int     lcd_dma_chan = -1;
-static dma_channel_config lcd_dma_cfg;
+// 前フレームとの比較用バッファ（差分検出）
+static uint8_t prev_fb[144][160];
 
-void lcd_gb_dma_init(void) {
-    lcd_dma_chan = dma_claim_unused_channel(true);
-    lcd_dma_cfg  = dma_channel_get_default_config(lcd_dma_chan);
-    channel_config_set_transfer_data_size(&lcd_dma_cfg, DMA_SIZE_8);
-    channel_config_set_dreq(&lcd_dma_cfg, spi_get_dreq(Pico_LCD_SPI_MOD, true));
-    channel_config_set_read_increment(&lcd_dma_cfg, true);
-    channel_config_set_write_increment(&lcd_dma_cfg, false);
-}
+// GB 画面（160×144）を 2x スケールで LCD に描画する。
+// 前フレームから変化した行のみ転送するため、静的シーンほど高速。
+void lcd_gb_frame_delta(const uint8_t fb[144][160])
+{
+    const int y_off = (LCD_HEIGHT - 144 * 2) / 2;  // = 16
+    bool any = false;
 
-// パレット展開 → DMA 転送開始（非ブロッキング）
-void lcd_gb_frame_start(const uint8_t fb[144][160]) {
-    uint8_t *dst = lcd_gb_buf;
-    for (int y = 0; y < 144; y++) {
-        for (int x = 0; x < 160; x++) {
-            const uint8_t *c = dmg_palette[fb[y][x] & 3];
-            *dst++ = c[0];
-            *dst++ = c[1];
-            *dst++ = c[2];
+    int y = 0;
+    while (y < 144) {
+        if (memcmp(fb[y], prev_fb[y], 160) == 0) {
+            y++;
+            continue;
         }
-    }
-    // 160×144 を 320×320 LCD の中央に配置: x=80, y=88
-    define_region_spi(80, 88, 239, 231, 1);
-    dma_channel_configure(lcd_dma_chan, &lcd_dma_cfg,
-                          &spi_get_hw(Pico_LCD_SPI_MOD)->dr,
-                          lcd_gb_buf,
-                          sizeof(lcd_gb_buf),
-                          true);
-}
+        // 連続する変化行の末尾を探す
+        int ys = y;
+        while (y < 144 && memcmp(fb[y], prev_fb[y], 160) != 0)
+            y++;
 
-// DMA 完了待ち・SPI / CS 後処理
-void lcd_gb_frame_wait(void) {
-    dma_channel_wait_for_finish_blocking(lcd_dma_chan);
-    spi_finish(Pico_LCD_SPI_MOD);
-    lcd_spi_raise_cs();
+        // LCD 座標 (2x): GB の ys〜y-1 行 → LCD の ys*2+y_off〜(y-1)*2+1+y_off 行
+        define_region_spi(0, ys * 2 + y_off, 319, (y - 1) * 2 + 1 + y_off, 1);
+
+        for (int row = ys; row < y; row++) {
+            uint8_t *p = lcd_buffer;
+            for (int x = 0; x < 160; x++) {
+                const uint8_t *c = dmg_palette[fb[row][x] & 3];
+                p[0]=c[0]; p[1]=c[1]; p[2]=c[2];
+                p[3]=c[0]; p[4]=c[1]; p[5]=c[2];
+                p += 6;
+            }
+            // 2x: 同じ行を 2 回送信
+            spi_write_fast(Pico_LCD_SPI_MOD, lcd_buffer, 960);
+            spi_write_fast(Pico_LCD_SPI_MOD, lcd_buffer, 960);
+        }
+        any = true;
+    }
+
+    if (any) {
+        spi_finish(Pico_LCD_SPI_MOD);
+        lcd_spi_raise_cs();
+    }
+
+    memcpy(prev_fb, fb, sizeof(prev_fb));
 }
 
 void lcd_clear(void) {
