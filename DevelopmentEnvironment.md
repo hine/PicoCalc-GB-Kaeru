@@ -103,6 +103,37 @@ echo $PICO_SDK_PATH
 
 ---
 
+## 4.1 direnv による自動環境変数設定（推奨）
+
+毎回 `PICO_SDK_PATH` を手動で設定する手間を省くため、direnv を使用する。
+ディレクトリに入ると自動的に `.envrc` が読み込まれ、環境変数が設定される。
+
+### インストール
+
+```
+sudo apt install -y direnv
+```
+
+### シェルへのフック設定
+
+```
+echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+### プロジェクトディレクトリの許可
+
+プロジェクトルートに `.envrc` が既に用意されている。初回のみ以下を実行して許可する：
+
+```
+cd ~/Projects/PicoCalc-GB-Kaeru
+direnv allow .
+```
+
+以降、ディレクトリに入るたびに `PICO_SDK_PATH` が自動設定される。
+
+---
+
 # 5. picotool導入
 
 UF2書き込みやデバッグ補助に使用する。
