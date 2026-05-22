@@ -36,6 +36,7 @@ target_include_directories(picocalc_gb_kaeru PRIVATE
 
 target_link_libraries(picocalc_gb_kaeru
     pico_stdlib
+    pico_multicore
     hardware_spi
     hardware_i2c
     hardware_flash

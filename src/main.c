@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "pico/stdlib.h"
+#include "pico/multicore.h"
 #include "video/video_lcd.h"
 #include "input/input_keyboard.h"
 #include "storage/storage_sd.h"
@@ -8,6 +9,28 @@
 #include "gb/gb_core.h"
 
 #define ROM_PATH "/roms/kaeru.gb"
+
+// Core 1 がキーボードをポーリングし、ここへ書く。Core 0 は読むだけ。
+// uint8_t の書き込みは ARM で atomic なので mutex 不要。
+static volatile uint8_t g_joypad = 0xFF;
+
+static void core1_kbd_poll(void) {
+    while (true) {
+        uint8_t joy = 0xFF;
+        switch (kbd_read()) {
+            case KEY_UP:        joy &= ~JOYPAD_UP;     break;
+            case KEY_DOWN:      joy &= ~JOYPAD_DOWN;   break;
+            case KEY_LEFT:      joy &= ~JOYPAD_LEFT;   break;
+            case KEY_RIGHT:     joy &= ~JOYPAD_RIGHT;  break;
+            case 'z': case 'Z': joy &= ~JOYPAD_A;      break;
+            case 'x': case 'X': joy &= ~JOYPAD_B;      break;
+            case KEY_ENTER:     joy &= ~JOYPAD_START;  break;
+            case KEY_BACKSPACE: joy &= ~JOYPAD_SELECT; break;
+            default: break;
+        }
+        g_joypad = joy;
+    }
+}
 
 int main()
 {
@@ -51,29 +74,14 @@ int main()
     }
 
     gb_core_set_joypad(0xFF);
+
+    // Core 1 にキーボードポーリングをオフロード（kbd_read 内の sleep_ms(16) が Core 0 をブロックしないよう）
+    multicore_launch_core1(core1_kbd_poll);
+
     lcd_clear();
 
-    // kbd_read() 内に sleep_ms(16) があるため 4 フレームに 1 回ポーリング
-    int kbd_div = 0;
-    uint8_t joypad = 0xFF;
-
     while (true) {
-        if (++kbd_div >= 4) {
-            kbd_div = 0;
-            joypad = 0xFF;
-            switch (kbd_read()) {
-                case KEY_UP:        joypad &= ~JOYPAD_UP;     break;
-                case KEY_DOWN:      joypad &= ~JOYPAD_DOWN;   break;
-                case KEY_LEFT:      joypad &= ~JOYPAD_LEFT;   break;
-                case KEY_RIGHT:     joypad &= ~JOYPAD_RIGHT;  break;
-                case 'z': case 'Z': joypad &= ~JOYPAD_A;      break;
-                case 'x': case 'X': joypad &= ~JOYPAD_B;      break;
-                case KEY_ENTER:     joypad &= ~JOYPAD_START;  break;
-                case KEY_BACKSPACE: joypad &= ~JOYPAD_SELECT; break;
-                default: break;
-            }
-            gb_core_set_joypad(joypad);
-        }
+        gb_core_set_joypad(g_joypad);
         gb_core_run_frame();
         lcd_gb_frame_delta(gb_fb);
     }
