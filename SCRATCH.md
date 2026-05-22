@@ -5,6 +5,51 @@
 
 ---
 
+## [解決済み] Milestone 6: セーブ対応 (2026-05-23)
+
+### 現状確認
+
+`emu/gb/gb_core.c` にて:
+- `gb_get_save_size_s()` で cart RAM サイズ取得済み
+- `ctx.cart_ram = malloc(save_size)` で確保済み（0xFF で初期化のみ）
+- `cart_ram_read_cb` / `cart_ram_write_cb` は実装済み
+- → **ロード・セーブの実体がない状態**
+
+### 設計方針
+
+**セーブタイミング**: ゲームが cart RAM に書き込むたび dirty フラグを立て、
+30 秒間隔の自動セーブ。ゲーム側の「セーブ」操作に自然に追従する。
+
+**SD マウント**: 現在 ROM flash 後に `sd_unmount()` しているが、
+SD（SPI0）と LCD（SPI1）は独立バスなので共存可能。
+SD を常時マウントしたまま定期セーブする。
+
+**ファイルパス**: `/saves/kaeru.sav`（`/saves/` ディレクトリは初回作成）
+
+### 実装計画
+
+1. `emu/gb/gb_core.c` / `gb_core.h`
+   - `cart_dirty` フラグ追加（`cart_ram_write_cb` でセット）
+   - 公開: `gb_core_save_size()`, `gb_core_cart_ram_ptr()`, `gb_core_is_dirty()`, `gb_core_clear_dirty()`
+
+2. `src/storage/save_sram.c` / `save_sram.h`
+   - `save_sram_load(path, ram, size)` — ファイルなし（初回）は正常扱い
+   - `save_sram_save(path, ram, size)` — `/saves/` ディレクトリを作成してから書き込み
+
+3. `src/main.c`
+   - `gb_core_init()` の後（cart_ram 確保後）に `save_sram_load()`
+   - `sd_unmount()` を削除してマウント継続
+   - メインループ内で dirty + 30 秒経過 → `save_sram_save()`
+
+4. `CMakeLists.txt` に `save_sram.c` を追加
+
+### リスク
+
+- SD SPI0 DMA と LCD SPI1 DMA の競合: 別バス・別チャンネルなので問題ないはず。実機確認必須。
+- セーブ中に 1 フレーム落ちる可能性: 8KB を SD に書く時間 ≈ 数 ms。許容範囲内。
+
+---
+
 ## [解決済み・HardwareSpec 記載済み] USB なし起動でキーボード認識しない問題 (2026-05-23)
 
 ### 症状

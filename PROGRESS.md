@@ -6,12 +6,11 @@
 
 ## 現在のフォーカス
 
-**Milestone 6: セーブ対応** または **Milestone 7: 音声対応**
+**Milestone 7: 音声対応**
 
 次のアクション：
 - [ ] スピーカー簡易出力（Milestone 1 残項目）
-- [ ] SRAM 保存 / 読み込み（Milestone 6）
-- [ ] SD へのセーブ（Milestone 6）
+- [ ] GB APU 出力（Milestone 7）
 
 ---
 
@@ -65,10 +64,10 @@
 - [x] ゲーム開始（実機確認済み 2026-05-23）
 - [x] 操作可能状態（USB・standalone 両方確認済み 2026-05-23）
 
-### Milestone 6: セーブ対応 ⬜ 未着手
+### Milestone 6: セーブ対応 ✅ 完了
 
-- [ ] SRAM 保存 / 読み込み
-- [ ] SD への保存
+- [x] SRAM 保存 / 読み込み
+- [x] SD への保存（30 秒間隔自動セーブ、`/saves/kaeru.sav`、実機確認済み 2026-05-23）
 
 ### Milestone 7: 音声対応 ⬜ 未着手
 
@@ -87,6 +86,8 @@
 - [ ] セーブステート
 - [ ] スリープ / 自動復帰
 - [ ] メニュー UI
+- [ ] LovyanGFX 導入検討（メニュー UI と合わせて評価）
+- [ ] SD 読み書き中の画面 UI 表示（セーブ中アイコン等、電源断防止）
 
 ---
 
@@ -105,6 +106,7 @@
 | 2026-05-22 | ROM を Flash XIP で提供（`src/storage/rom_flash.c`） | SD バンク読み込みが 1 フレームに 8 回発生し 7.5fps 止まりだったため。Flash XIP に切替後 ~60fps 達成 |
 | 2026-05-22 | LCD 表示を 1x スケール + DMA ダブルバッファに変更 | 2x ブロッキング転送(276KB@25MHz)が 88ms/frame で 6-10fps だったため。1x(69KB@37.5MHz) + DMA で ~60fps 達成 |
 | 2026-05-22 | GBエミュレーションコアは Peanut-GB（ヘッダオンリー）を採用 | 軽量・移植性高い・RP2350 実績あり |
+| 2026-05-23 | LovyanGFX 導入は Milestone 9 まで先送り | ILI9488 対応・CMake 統合（add_subdirectory）とも問題ないが、現在の DMA delta 描画は既に ~60fps で十分。音声対応への寄与もなし。メニュー UI 実装時に改めて評価する |
 
 ---
 

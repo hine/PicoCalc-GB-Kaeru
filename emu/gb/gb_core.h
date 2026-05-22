@@ -1,5 +1,7 @@
 #pragma once
 #include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 
 #define GB_SCREEN_W 160
 #define GB_SCREEN_H 144
@@ -33,3 +35,9 @@ void gb_core_set_joypad(uint8_t joypad);
 
 // lcd_line_cb が書き込む先のフレームバッファを切り替える（ダブルバッファ用）。
 void gb_core_set_fb(uint8_t (*fb)[GB_SCREEN_W]);
+
+// セーブ RAM アクセス
+size_t   gb_core_save_size(void);
+uint8_t *gb_core_cart_ram_ptr(void);
+bool     gb_core_is_dirty(void);
+void     gb_core_clear_dirty(void);

@@ -6,9 +6,12 @@
 #include "input/input_keyboard.h"
 #include "storage/storage_sd.h"
 #include "storage/rom_flash.h"
+#include "storage/save_sram.h"
 #include "gb/gb_core.h"
 
-#define ROM_PATH "/roms/kaeru.gb"
+#define ROM_PATH  "0:/roms/kaeru.gb"
+#define SAVE_PATH "0:/saves/kaeru.sav"
+#define AUTOSAVE_INTERVAL_US (30 * 1000 * 1000)
 
 // Core 1 がキーボードをポーリングし、ここへ書く。Core 0 は読むだけ。
 // uint8_t の書き込みは ARM で atomic なので mutex 不要。
@@ -93,9 +96,6 @@ int main()
         while (true) tight_loop_contents();
     }
 
-    // SD はもう不要
-    sd_unmount();
-
     lcd_print_string("Starting emulator...\n");
     rc = gb_core_init();
     if (rc != 0) {
@@ -103,6 +103,15 @@ int main()
         snprintf(buf, sizeof(buf), "GB init FAILED: %d\n", rc);
         lcd_print_string(buf);
         while (true) tight_loop_contents();
+    }
+
+    // cart RAM をセーブファイルから読み込む（ファイルなしは初回起動として正常）
+    if (gb_core_save_size() > 0) {
+        int sr = save_sram_load(SAVE_PATH, gb_core_cart_ram_ptr(), gb_core_save_size());
+        if (sr == 0)
+            lcd_print_string("Save loaded.\n");
+        else if (sr == 1)
+            lcd_print_string("No save file.\n");
     }
 
     gb_core_set_joypad(0xFF);
@@ -116,6 +125,8 @@ int main()
 
     lcd_clear();
 
+    absolute_time_t last_save = get_absolute_time();
+
     while (true) {
         // フレームタイマーを待ってから実行（フレームレート固定）
         while (!g_frame_tick) tight_loop_contents();
@@ -124,5 +135,13 @@ int main()
         gb_core_set_joypad(g_joypad);
         gb_core_run_frame();
         lcd_gb_frame_delta(gb_fb);
+
+        // 30 秒ごとに dirty な cart RAM を SD へ自動セーブ
+        if (gb_core_is_dirty() &&
+            absolute_time_diff_us(last_save, get_absolute_time()) >= AUTOSAVE_INTERVAL_US) {
+            save_sram_save(SAVE_PATH, gb_core_cart_ram_ptr(), gb_core_save_size());
+            gb_core_clear_dirty();
+            last_save = get_absolute_time();
+        }
     }
 }

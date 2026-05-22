@@ -22,6 +22,7 @@ add_executable(picocalc_gb_kaeru
     src/input/input_keyboard.c
     src/storage/storage_sd.c
     src/storage/rom_flash.c
+    src/storage/save_sram.c
     emu/gb/gb_core.c
     hw_config.c
 )

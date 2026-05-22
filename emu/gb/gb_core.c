@@ -2,6 +2,8 @@
 #include "storage/rom_flash.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stddef.h>
+#include <stdbool.h>
 
 #define ENABLE_LCD 1
 #include "peanut_gb.h"
@@ -13,6 +15,8 @@ typedef struct {
 
 static struct gb_s gb;
 static rom_ctx_t  ctx;
+static size_t     g_save_size = 0;
+static bool       g_cart_dirty = false;
 
 uint8_t gb_fb[GB_SCREEN_H][GB_SCREEN_W];
 
@@ -38,7 +42,10 @@ static void cart_ram_write_cb(struct gb_s *g, const uint_fast32_t addr,
                                const uint8_t val)
 {
     rom_ctx_t *r = g->direct.priv;
-    if (r->cart_ram) r->cart_ram[addr] = val;
+    if (r->cart_ram) {
+        r->cart_ram[addr] = val;
+        g_cart_dirty = true;
+    }
 }
 
 static void error_cb(struct gb_s *g, const enum gb_error_e err,
@@ -67,16 +74,20 @@ int gb_core_init(void)
 
     gb_init_lcd(&gb, lcd_line_cb);
 
-    size_t save_size = 0;
-    gb_get_save_size_s(&gb, &save_size);
-    if (save_size > 0) {
-        ctx.cart_ram = malloc(save_size);
+    gb_get_save_size_s(&gb, &g_save_size);
+    if (g_save_size > 0) {
+        ctx.cart_ram = malloc(g_save_size);
         if (!ctx.cart_ram) return -3;
-        memset(ctx.cart_ram, 0xFF, save_size);
+        memset(ctx.cart_ram, 0xFF, g_save_size);
     }
 
     return 0;
 }
+
+size_t gb_core_save_size(void)       { return g_save_size; }
+uint8_t *gb_core_cart_ram_ptr(void)  { return ctx.cart_ram; }
+bool gb_core_is_dirty(void)          { return g_cart_dirty; }
+void gb_core_clear_dirty(void)       { g_cart_dirty = false; }
 
 void gb_core_run_frame(void)
 {
