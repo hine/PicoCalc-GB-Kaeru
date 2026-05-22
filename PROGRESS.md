@@ -6,11 +6,12 @@
 
 ## 現在のフォーカス
 
-**Milestone 4: 入力対応** — キーボードマッピング実装済み、実機確認待ち
+**Milestone 5: 対象ROM起動** — 「カエルのために鐘は鳴る」の起動・操作確認
 
 次のアクション：
-- [ ] 実機で操作確認（Milestone 4）
-- [ ] 「カエルのために鐘は鳴る」タイトル〜ゲーム起動確認（Milestone 5）
+- [ ] 「カエルのために鐘は鳴る」タイトル表示確認（Milestone 5）
+- [ ] ゲーム開始・操作可能状態の確認（Milestone 5）
+- [ ] スピーカー簡易出力（Milestone 1 残項目）
 
 ---
 
@@ -50,11 +51,12 @@
 - [x] フレーム更新ループ（DMA ダブルバッファで ~60fps 達成 2026-05-22）
 - [ ] 簡易 FPS 計測
 
-### Milestone 4: 入力対応 🔄 進行中
+### Milestone 4: 入力対応 ✅ 完了
 
 - [x] 十字キー（KEY_UP/DOWN/LEFT/RIGHT）
-- [x] A / B（z=A, x=B）
+- [x] A / B（`,`=A, `.`=B）
 - [x] Start / Select（Enter=Start, Backspace=Select）
+- [x] press/release 状態管理（「ポチ」押しの取りこぼし修正 実機確認済み 2026-05-22）
 - [ ] Menu（Esc）→ Milestone 9 で対応
 
 ### Milestone 5: 対象ROM起動 ⬜ 未着手
