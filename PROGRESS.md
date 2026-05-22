@@ -9,8 +9,8 @@
 **Milestone 1: PicoCalc 基本I/O** — LCD Hello World・キーボード入力 実機確認済み
 
 次のアクション：
-- [ ] platform 層: SDカード ドライバ実装
-- [ ] GBエミュレーションコア選定（Peanut-GB vs Walnut-CGB）
+- [ ] スピーカー簡易出力（任意）またはスキップして Milestone 2 へ
+- [ ] GBエミュレーションコア選定・組み込み（Peanut-GB 有力）
 
 ---
 
@@ -33,7 +33,7 @@
 - [x] 既存 GB エミュレータ実装調査（→ `HardwareSpec.md`）
 - [x] LCD 初期化・Hello World 表示（緑文字で実機確認済み 2026-05-22）
 - [x] キーボード入力取得（実機確認済み 2026-05-22）
-- [ ] SDカード読み込み確認
+- [x] SDカード読み込み確認（実機確認済み 2026-05-22）
 - [ ] スピーカー簡易出力
 
 ### Milestone 2: GBコア組み込み ⬜ 未着手
@@ -97,6 +97,8 @@
 | 2026-05-22 | Peanut-GB が有力候補 | PicoCalc + RP2350 向け既存実装の大多数が採用、軽量・移植性高い |
 | 2026-05-22 | LCD は SPI1 (GP10-15)、10kHz I2C キーボード (GP6/7, 0x1F)、SD は SPI0 (GP16-19) | PicoCalc ハードウェア仕様調査結果より |
 | 2026-05-22 | RTC は no-op スタブで対処（`compat/hardware/rtc.h`）。Milestone 6 までに再検討 | 下記「RTCに関する調査・経緯」参照 |
+| 2026-05-22 | USB stdio を無効化（`pico_enable_stdio_usb 0`） | TinyUSB が SPI0/DMA と競合し SD マウント失敗するため |
+| 2026-05-22 | `kbd_wait_power()` を廃止し `sd_mount()` リトライループで代替 | PicoCalc 同時起動時に KB コントローラの I2C stuck bus が発生し永久待機になるため。SD マウント自体を直接リトライする方が堅牢 |
 
 ---
 

@@ -45,6 +45,11 @@
 #define KEY_MOD_SYM    0xA4
 #define KEY_MOD_CTRL   0xA5
 
+// PicoCalc メイン電源投入を待つ（キーボードコントローラの I2C 応答で検出）
+// USB 単独起動時など、SD カード電源が RP2350 と独立している場合に使用する。
+// kbd_init() より前に呼ぶこと。
+void kbd_wait_power(void);
+
 void kbd_init(void);
 int  kbd_read(void);          // 押下キーの ASCII を返す。なければ -1
 int  kbd_read_battery(void);  // バッテリー残量

@@ -9,20 +9,38 @@ set(CMAKE_CXX_STANDARD 17)
 
 pico_sdk_init()
 
+# RP2350 では hardware_rtc が廃止されているため、FatFs_SPI が要求する空スタブを提供する
+if(NOT TARGET hardware_rtc)
+    add_library(hardware_rtc INTERFACE)
+endif()
+
+add_subdirectory(lib/no-OS-FatFS-SD-SPI-RPi-Pico/FatFs_SPI)
+
 add_executable(picocalc_gb_kaeru
     src/main.c
     src/video/video_lcd.c
     src/input/input_keyboard.c
+    src/storage/storage_sd.c
+    hw_config.c
+)
+
+target_include_directories(picocalc_gb_kaeru PRIVATE
+    src
+    lib/no-OS-FatFS-SD-SPI-RPi-Pico/FatFs_SPI/include
+    compat   # hardware/rtc.h stub for RP2350 (removed in SDK)
 )
 
 target_link_libraries(picocalc_gb_kaeru
     pico_stdlib
     hardware_spi
     hardware_i2c
+    FatFs_SPI
 )
 
 pico_add_extra_outputs(picocalc_gb_kaeru)
 
-pico_enable_stdio_usb(picocalc_gb_kaeru 1)
+# USB stdio を無効化: TinyUSB が SPI0/DMA リソースと競合し SD マウントが失敗するため。
+# GB エミュレーターとして LCD が唯一の出力デバイスなので USB serial は不要。
+# デバッグ時は UART (GP0/GP1) を使うか、LCD 出力で確認する。
+pico_enable_stdio_usb(picocalc_gb_kaeru 0)
 pico_enable_stdio_uart(picocalc_gb_kaeru 0)
-

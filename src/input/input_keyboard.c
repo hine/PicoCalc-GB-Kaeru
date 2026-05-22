@@ -1,9 +1,23 @@
-#include <stdio.h>
 #include "pico/stdlib.h"
 #include "hardware/i2c.h"
 #include "input_keyboard.h"
 
 static uint8_t kbd_inited = 0;
+
+void kbd_wait_power(void) {
+    uint8_t msg = 0x09;
+    for (;;) {
+        // タイムアウト後の I2C stuck bus を毎回リセットする
+        i2c_init(I2C_KBD_MOD, I2C_KBD_SPEED);
+        gpio_set_function(I2C_KBD_SCL, GPIO_FUNC_I2C);
+        gpio_set_function(I2C_KBD_SDA, GPIO_FUNC_I2C);
+        gpio_pull_up(I2C_KBD_SCL);
+        gpio_pull_up(I2C_KBD_SDA);
+        if (i2c_write_timeout_us(I2C_KBD_MOD, I2C_KBD_ADDR, &msg, 1, false, 100000) >= 0)
+            break;
+        sleep_ms(200);
+    }
+}
 
 void kbd_init(void) {
     i2c_init(I2C_KBD_MOD, I2C_KBD_SPEED);
