@@ -28,6 +28,21 @@ void kbd_init(void) {
     kbd_inited = 1;
 }
 
+void kbd_wait_ready(void) {
+    uint8_t msg = 0x09;
+    for (;;) {
+        i2c_init(I2C_KBD_MOD, I2C_KBD_SPEED);
+        gpio_set_function(I2C_KBD_SCL, GPIO_FUNC_I2C);
+        gpio_set_function(I2C_KBD_SDA, GPIO_FUNC_I2C);
+        gpio_pull_up(I2C_KBD_SCL);
+        gpio_pull_up(I2C_KBD_SDA);
+        if (i2c_write_timeout_us(I2C_KBD_MOD, I2C_KBD_ADDR, &msg, 1, false, 100000) >= 0)
+            break;
+        sleep_ms(200);
+    }
+    kbd_inited = 1;
+}
+
 int kbd_read(void) {
     if (!kbd_inited) return -1;
 

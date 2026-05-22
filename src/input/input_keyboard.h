@@ -51,6 +51,8 @@
 void kbd_wait_power(void);
 
 void kbd_init(void);
+// KB コントローラが応答するまで I2C 再初期化しながら待機（Core 1 から呼ぶこと）
+void kbd_wait_ready(void);
 int  kbd_read(void);          // 押下キーの ASCII を返す。なければ -1
 // press/release イベントを返す。戻り値=キーコード(>0)、*pressed=1押下/0離し。イベントなし/-1
 int  kbd_read_event(int *pressed);

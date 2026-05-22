@@ -39,8 +39,11 @@ static uint8_t key_to_joypad_bit(int c) {
 }
 
 static void core1_kbd_poll(void) {
-    // I2C バスが安定するまで待機（kbd_init 直後は stuck bus になりやすい）
-    sleep_ms(500);
+    // キーボードコントローラが応答するまで待機（I2C 再初期化込み）。
+    // USB なし起動では KB コントローラの起動が Pico より遅れる場合がある。
+    // Core 1 で実行するため Core 0（GB エミュレータ）をブロックしない。
+    kbd_wait_ready();
+
     uint8_t joy = 0xFF;  // 状態を持続させる（毎ループリセットしない）
     while (true) {
         int pressed;
