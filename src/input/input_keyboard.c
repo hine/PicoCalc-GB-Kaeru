@@ -14,17 +14,24 @@ static void i2c_bus_recover(void) {
     gpio_init(I2C_KBD_SDA);
     gpio_set_dir(I2C_KBD_SDA, GPIO_IN);
     gpio_pull_up(I2C_KBD_SDA);
+    sleep_us(50);  // プルアップが充電されるのを待つ
 
+    // SDA が HIGH なら stuck していない → 何もしない
+    // gpio_init は出力レジスタを 0 にするため、ここで return せずに
+    // gpio_set_dir(OUT) を呼ぶと SDA が即 LOW になりコントローラが混乱する
+    if (gpio_get(I2C_KBD_SDA)) return;
+
+    // SDA が stuck (LOW)。SCL を最大 9 パルス出力して解放を試みる。
     for (int i = 0; i < 9; i++) {
-        if (gpio_get(I2C_KBD_SDA)) break;  // SDA 解放済み
         gpio_put(I2C_KBD_SCL, 0); sleep_us(50);
         gpio_put(I2C_KBD_SCL, 1); sleep_us(50);
+        if (gpio_get(I2C_KBD_SDA)) break;
     }
 
-    // STOP コンディションでバスをアイドル状態に戻す
+    // START + STOP でスレーブのステートマシンをリセット
     gpio_set_dir(I2C_KBD_SDA, GPIO_OUT);
-    gpio_put(I2C_KBD_SDA, 0); sleep_us(50);
-    gpio_put(I2C_KBD_SDA, 1); sleep_us(50);
+    gpio_put(I2C_KBD_SDA, 0); sleep_us(50);  // SDA LOW (SCL HIGH) = START
+    gpio_put(I2C_KBD_SDA, 1); sleep_us(50);  // SDA HIGH (SCL HIGH) = STOP
 }
 
 void kbd_wait_power(void) {
