@@ -1,0 +1,13 @@
+build/
+*.uf2
+*.elf
+*.bin
+*.map
+compile_commands.json
+
+roms/*.gb
+roms/*.gbc
+
+saves/*
+*.sav
+*.state
