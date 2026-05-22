@@ -4,6 +4,16 @@
 #define GB_SCREEN_W 160
 #define GB_SCREEN_H 144
 
+// ジョイパッドビット定数（active-low: 0=押下, 1=未押下）
+#define JOYPAD_A      0x01
+#define JOYPAD_B      0x02
+#define JOYPAD_SELECT 0x04
+#define JOYPAD_START  0x08
+#define JOYPAD_RIGHT  0x10
+#define JOYPAD_LEFT   0x20
+#define JOYPAD_UP     0x40
+#define JOYPAD_DOWN   0x80
+
 // DMG パレットインデックス (0-3) のフレームバッファ。
 // gb_core_run_frame() 呼び出し後に更新される。
 extern uint8_t gb_fb[GB_SCREEN_H][GB_SCREEN_W];

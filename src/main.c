@@ -53,7 +53,27 @@ int main()
     gb_core_set_joypad(0xFF);
     lcd_clear();
 
+    // kbd_read() 内に sleep_ms(16) があるため 4 フレームに 1 回ポーリング
+    int kbd_div = 0;
+    uint8_t joypad = 0xFF;
+
     while (true) {
+        if (++kbd_div >= 4) {
+            kbd_div = 0;
+            joypad = 0xFF;
+            switch (kbd_read()) {
+                case KEY_UP:        joypad &= ~JOYPAD_UP;     break;
+                case KEY_DOWN:      joypad &= ~JOYPAD_DOWN;   break;
+                case KEY_LEFT:      joypad &= ~JOYPAD_LEFT;   break;
+                case KEY_RIGHT:     joypad &= ~JOYPAD_RIGHT;  break;
+                case 'z': case 'Z': joypad &= ~JOYPAD_A;      break;
+                case 'x': case 'X': joypad &= ~JOYPAD_B;      break;
+                case KEY_ENTER:     joypad &= ~JOYPAD_START;  break;
+                case KEY_BACKSPACE: joypad &= ~JOYPAD_SELECT; break;
+                default: break;
+            }
+            gb_core_set_joypad(joypad);
+        }
         gb_core_run_frame();
         lcd_gb_frame_delta(gb_fb);
     }

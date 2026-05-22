@@ -6,10 +6,11 @@
 
 ## 現在のフォーカス
 
-**Milestone 3: 画面表示** — ~60fps DMA ダブルバッファ表示 実機確認済み
+**Milestone 4: 入力対応** — キーボードマッピング実装済み、実機確認待ち
 
 次のアクション：
-- [ ] Milestone 4: 十字キー・A/B/Start/Select 入力対応
+- [ ] 実機で操作確認（Milestone 4）
+- [ ] 「カエルのために鐘は鳴る」タイトル〜ゲーム起動確認（Milestone 5）
 
 ---
 
@@ -49,12 +50,12 @@
 - [x] フレーム更新ループ（DMA ダブルバッファで ~60fps 達成 2026-05-22）
 - [ ] 簡易 FPS 計測
 
-### Milestone 4: 入力対応 ⬜ 未着手
+### Milestone 4: 入力対応 🔄 進行中
 
-- [ ] 十字キー
-- [ ] A / B
-- [ ] Start / Select
-- [ ] Menu（Esc）
+- [x] 十字キー（KEY_UP/DOWN/LEFT/RIGHT）
+- [x] A / B（z=A, x=B）
+- [x] Start / Select（Enter=Start, Backspace=Select）
+- [ ] Menu（Esc）→ Milestone 9 で対応
 
 ### Milestone 5: 対象ROM起動 ⬜ 未着手
 
