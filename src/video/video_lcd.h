@@ -91,5 +91,10 @@ extern void lcd_gb_frame_delta(const uint8_t fb[144][160]);
 extern void lcd_status_draw_hints(void);
 // 上部 16px ストリップ右端に SD アクセスインジケーターを表示/消去する（状態変化時のみ SPI 転送）。
 extern void lcd_status_sd_icon(int active);
+// 上部 16px ストリップ左側に最大 8 文字のメッセージを白文字で表示する。
+// msg が 8 文字未満の場合は右側をスペースで埋める。
+extern void lcd_status_top_text(const char *msg);
+// 差分バッファを無効化して次フレームで全 GB 画面を強制再描画する（セーブステートロード後に呼ぶ）。
+extern void lcd_gb_frame_invalidate(void);
 
 #endif // VIDEO_LCD_H

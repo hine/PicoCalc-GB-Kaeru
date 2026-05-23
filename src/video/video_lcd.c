@@ -423,7 +423,7 @@ void lcd_status_draw_hints(void) {
     current_x = 4;
     current_y = 304 + (16 - gui_font_height) / 2;  // 2px padding
 
-    const char *hint = "\",\"=A  \".\"=B  BS=Sel  ENT=Sta";
+    const char *hint = ",=A .=B BS=Sel En=Sta F2=Sv F3=Sl F4=Ld";
     while (*hint) display_put_c(*hint++);
 
     gui_fcolour = saved_fc;
@@ -439,4 +439,33 @@ void lcd_status_sd_icon(int active) {
     if (active == prev) return;
     prev = active;
     draw_rect_spi(308, 2, 317, 13, active ? YELLOW : BLACK);
+}
+
+// 上部 16px ストリップ左側 (x=4, y=2) に最大 8 文字を白文字で表示する。
+void lcd_status_top_text(const char *msg) {
+    int saved_fc = gui_fcolour, saved_bc = gui_bcolour;
+    short saved_x = current_x, saved_y = current_y;
+
+    gui_fcolour = WHITE;
+    gui_bcolour = BLACK;
+    current_x   = 4;
+    current_y   = (16 - gui_font_height) / 2;  // 2px padding
+
+    char padded[9];
+    int i = 0;
+    while (i < 8 && msg[i]) { padded[i] = msg[i]; i++; }
+    while (i < 8) { padded[i++] = ' '; }
+    padded[8] = '\0';
+
+    for (const char *p = padded; *p; p++) display_put_c(*p);
+
+    gui_fcolour = saved_fc;
+    gui_bcolour = saved_bc;
+    current_x   = saved_x;
+    current_y   = saved_y;
+}
+
+// prev_fb を無効化して次回 lcd_gb_frame_delta() で全画面を強制再描画する。
+void lcd_gb_frame_invalidate(void) {
+    memset(prev_fb, 0xFF, sizeof(prev_fb));
 }

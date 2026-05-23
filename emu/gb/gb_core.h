@@ -47,3 +47,9 @@ void     gb_core_clear_dirty(void);
 #define GB_AUDIO_SAMPLES      548   // L/R ペア数/フレーム（32768Hz / ~59.73fps）
 #define GB_AUDIO_SAMPLES_TOTAL (GB_AUDIO_SAMPLES * 2)
 void gb_core_fill_audio(int16_t *buf);
+
+// セーブステート: エミュレータ全体の状態（CPU・メモリ・APU）を直列化する。
+// buf は gb_core_state_size() バイト以上のバッファであること。
+size_t gb_core_state_size(void);
+void   gb_core_state_save(void *buf);
+void   gb_core_state_load(const void *buf);

@@ -110,6 +110,36 @@ void gb_core_run_frame(void)
     gb_run_frame(&gb);
 }
 
+size_t gb_core_state_size(void)
+{
+    return sizeof(gb) + sizeof(apu_ctx);
+}
+
+void gb_core_state_save(void *buf)
+{
+    uint8_t *p = (uint8_t *)buf;
+    memcpy(p,              &gb,      sizeof(gb));
+    memcpy(p + sizeof(gb), &apu_ctx, sizeof(apu_ctx));
+}
+
+void gb_core_state_load(const void *buf)
+{
+    const uint8_t *p = (const uint8_t *)buf;
+    memcpy(&gb,      p,              sizeof(gb));
+    memcpy(&apu_ctx, p + sizeof(gb), sizeof(apu_ctx));
+
+    // ポインタ類をこのバイナリのアドレスに上書き修正
+    gb.gb_rom_read         = rom_read_cb;
+    gb.gb_cart_ram_read    = cart_ram_read_cb;
+    gb.gb_cart_ram_write   = cart_ram_write_cb;
+    gb.gb_error            = error_cb;
+    gb.gb_serial_tx        = NULL;
+    gb.gb_serial_rx        = NULL;
+    gb.gb_bootrom_read     = NULL;
+    gb.display.lcd_draw_line = lcd_line_cb;
+    gb.direct.priv         = &ctx;
+}
+
 void gb_core_set_joypad(uint8_t joypad)
 {
     gb.direct.joypad = joypad;
