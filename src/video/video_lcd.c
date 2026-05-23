@@ -407,3 +407,36 @@ void lcd_init(void) {
     gui_fcolour = GREEN;
     gui_bcolour = BLACK;
 }
+
+// 下部ステータスバー背景色
+#define STATUS_BG RGB(24, 24, 24)
+
+// 下部 16px ストリップ (y=304-319) にキーヒントを描画する（起動時一度）。
+void lcd_status_draw_hints(void) {
+    draw_rect_spi(0, 304, 319, 319, STATUS_BG);
+
+    int saved_fc = gui_fcolour, saved_bc = gui_bcolour;
+    short saved_x = current_x, saved_y = current_y;
+
+    gui_fcolour = GRAY;
+    gui_bcolour = STATUS_BG;
+    current_x = 4;
+    current_y = 304 + (16 - gui_font_height) / 2;  // 2px padding
+
+    const char *hint = "\",\"=A  \".\"=B  BS=Sel  ENT=Sta";
+    while (*hint) display_put_c(*hint++);
+
+    gui_fcolour = saved_fc;
+    gui_bcolour = saved_bc;
+    current_x = saved_x;
+    current_y = saved_y;
+}
+
+// 上部 16px ストリップ右端 (x=308-317, y=2-13) に SD アクセスインジケーターを表示/消去する。
+// 状態が変化したときのみ SPI 転送を行う。
+void lcd_status_sd_icon(int active) {
+    static int prev = -1;
+    if (active == prev) return;
+    prev = active;
+    draw_rect_spi(308, 2, 317, 13, active ? YELLOW : BLACK);
+}

@@ -127,6 +127,7 @@ int main()
     add_repeating_timer_us(-16743, frame_timer_cb, NULL, &frame_timer);
 
     lcd_clear();
+    lcd_status_draw_hints();
 
     absolute_time_t last_save = get_absolute_time();
     static int16_t audio_buf[GB_AUDIO_SAMPLES_TOTAL];
@@ -147,9 +148,11 @@ int main()
         // 30 秒ごとに dirty な cart RAM を SD へ自動セーブ
         if (gb_core_is_dirty() &&
             absolute_time_diff_us(last_save, get_absolute_time()) >= AUTOSAVE_INTERVAL_US) {
+            lcd_status_sd_icon(1);
             save_sram_save(SAVE_PATH, gb_core_cart_ram_ptr(), gb_core_save_size());
             gb_core_clear_dirty();
             last_save = get_absolute_time();
+            lcd_status_sd_icon(0);
         }
     }
 }

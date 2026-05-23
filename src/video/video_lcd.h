@@ -86,4 +86,10 @@ extern void pin_set_bit(int pin, unsigned int offset);
 // 前フレームとの差分行のみ転送するため、静的シーンほど高速。
 extern void lcd_gb_frame_delta(const uint8_t fb[144][160]);
 
+// ステータスバー
+// 下部 16px ストリップ (y=304-319) にキーヒントを描画する（起動時に一度だけ呼ぶ）。
+extern void lcd_status_draw_hints(void);
+// 上部 16px ストリップ右端に SD アクセスインジケーターを表示/消去する（状態変化時のみ SPI 転送）。
+extern void lcd_status_sd_icon(int active);
+
 #endif // VIDEO_LCD_H
