@@ -48,6 +48,7 @@ target_link_libraries(picocalc_gb_kaeru
     hardware_sync
     hardware_pwm
     hardware_dma
+    hardware_powman
     FatFs_SPI
 )
 
