@@ -10,36 +10,37 @@
 #define AUDIO_PIN_R      27
 
 // slice 4: DMA ペーサー専用（GPIO 出力なし）
-// wrap=3814 → 125MHz/3814 ≈ 32774Hz DREQ ≈ AUDIO_SAMPLE_RATE
+// RP2350 デフォルト 150MHz: wrap=4576 → 150MHz/4577 ≈ 32773Hz DREQ ≈ AUDIO_SAMPLE_RATE(32768Hz)
+// ※ 125MHz 前提の 3814 では 39319Hz となり音が ~2.4 半音高くなる
 #define TIMER_PWM_SLICE  4
-#define TIMER_WRAP       3814
+#define TIMER_WRAP       4576
 
-// 10bit 解像度 → キャリア 125MHz/1024 ≈ 122kHz（可聴域外）
-#define AUDIO_WRAP       1023
+// 12bit 解像度 → キャリア 150MHz/4096 ≈ 36.6kHz（可聴域外）
+#define AUDIO_WRAP       4095
 
-// 1フレーム分の L/R ペア数（32768Hz / ~59.73fps ≈ 548）
+// 548 サンプル ≈ 33ms バッファ（GB_AUDIO_SAMPLES と一致させること）
 #define DMA_BUF_SAMPLES  548
 
 static uint32_t       dma_buf[2][DMA_BUF_SAMPLES];
 static int            dma_chan    = -1;
-static volatile int   dma_play   = 0;     // DMA が現在再生中のバッファ番号
-static volatile bool  buf_needs_fill = false;
+static volatile int   dma_play   = 0;
 
-// DMA 完了 IRQ: ブロッキングなしで即座に交互バッファへ切り替える
-// FatFS SPI ドライバも DMA_IRQ_1 を共有しているため、自チャンネルのみ処理する
-static void __isr audio_dma_irq(void) {
-    if (!dma_channel_get_irq1_status(dma_chan)) return;
-    dma_channel_acknowledge_irq1(dma_chan);
-    dma_play ^= 1;
-    dma_channel_set_read_addr(dma_chan, dma_buf[dma_play], false);
-    dma_channel_set_trans_count(dma_chan, DMA_BUF_SAMPLES, true);  // trigger
-    buf_needs_fill = true;
+static audio_fill_cb_t fill_cb = NULL;
+
+void audio_pwm_set_fill_cb(audio_fill_cb_t cb) {
+    fill_cb = cb;
 }
 
-static inline uint16_t s16_to_pwm(int16_t s)
-{
-    // S16 [-32768, 32767] → 10bit [0, 1023]
-    return (uint16_t)((s + 32768) >> 6);
+// DMA 完了 IRQ: 次バッファへ切り替え → fill_cb で即座に補充
+// FatFS が DMA_IRQ_1 を使うため DMA_IRQ_0 を使用
+static void __isr audio_dma_irq(void) {
+    if (!dma_channel_get_irq0_status(dma_chan)) return;
+    dma_channel_acknowledge_irq0(dma_chan);
+    dma_play ^= 1;
+    dma_channel_set_read_addr(dma_chan, dma_buf[dma_play], false);
+    dma_channel_set_trans_count(dma_chan, DMA_BUF_SAMPLES, true);
+    int fill = 1 - dma_play;
+    if (fill_cb) fill_cb(dma_buf[fill], DMA_BUF_SAMPLES);
 }
 
 void audio_pwm_init(void)
@@ -78,34 +79,18 @@ void audio_pwm_init(void)
         DMA_BUF_SAMPLES,
         false);
 
-    // DMA_IRQ_1 を共有ハンドラとして登録（FatFS SPI ドライバが同 IRQ を使うため）
-    dma_channel_set_irq1_enabled(dma_chan, true);
-    irq_add_shared_handler(DMA_IRQ_1, audio_dma_irq, PICO_SHARED_IRQ_HANDLER_DEFAULT_ORDER_PRIORITY);
-    irq_set_enabled(DMA_IRQ_1, true);
+    // DMA_IRQ_0 を使用（Core 1 に登録）
+    dma_channel_set_irq0_enabled(dma_chan, true);
+    irq_set_exclusive_handler(DMA_IRQ_0, audio_dma_irq);
+    irq_set_enabled(DMA_IRQ_0, true);
 
     dma_channel_start(dma_chan);
 }
 
 void audio_pwm_stop(void) {
     if (dma_chan < 0) return;
-    dma_channel_set_irq1_enabled(dma_chan, false);
+    dma_channel_set_irq0_enabled(dma_chan, false);
     dma_channel_abort(dma_chan);
     pwm_set_enabled(AUDIO_PWM_SLICE, false);
     pwm_set_enabled(TIMER_PWM_SLICE, false);
-}
-
-void audio_pwm_submit(const int16_t *samples, int n_pairs)
-{
-    if (!buf_needs_fill) return;
-
-    // 現在 DMA が再生していない側のバッファへ書く
-    int fill = 1 - dma_play;
-    buf_needs_fill = false;
-
-    if (n_pairs > DMA_BUF_SAMPLES) n_pairs = DMA_BUF_SAMPLES;
-    for (int i = 0; i < n_pairs; i++) {
-        uint32_t l = s16_to_pwm(samples[i * 2]);
-        uint32_t r = s16_to_pwm(samples[i * 2 + 1]);
-        dma_buf[fill][i] = (r << 16) | l;
-    }
 }
