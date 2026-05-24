@@ -41,6 +41,7 @@ size_t   gb_core_save_size(void);
 uint8_t *gb_core_cart_ram_ptr(void);
 bool     gb_core_is_dirty(void);
 void     gb_core_clear_dirty(void);
+bool     gb_core_consume_dirty(void); // dirty フラグを返してクリア（フレームごとの書き込み検出用）
 
 // 1フレーム分の S16 ステレオインターリーブ音声サンプルを buf へ書き込む。
 // buf は GB_AUDIO_SAMPLES_TOTAL 要素以上の int16_t 配列であること。

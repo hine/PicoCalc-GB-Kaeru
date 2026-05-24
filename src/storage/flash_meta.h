@@ -1,0 +1,39 @@
+#pragma once
+#include <stdint.h>
+#include <stdbool.h>
+
+// Flash メタデータセクタ（ステートセーブ 11 スロット直後: 1920KB）
+//
+// Flash レイアウト全体:
+//   0x000000 -  1MB  : ファームウェア
+//   0x100000 - +512KB: ROM データ
+//   0x180000 -  +32KB: SRAM セーブ
+//   0x188000 - +352KB: セーブステート (11スロット)
+//   0x1E0000 -   +4KB: メタデータ ← このファイル
+//
+#define FLASH_META_OFFSET  (1920u * 1024u)
+
+// ── ROM メタデータ ─────────────────────────────────────────────────────────
+// ROM が Flash に有効に書き込まれているかを返す（SD なしで起動可能かの判定に使う）
+bool flash_meta_rom_valid(void);
+
+// ROM フラッシュ後に呼ぶ。rom_title_11 は GB ヘッダ 0x0134 から 11 バイト。
+// Core 1 未起動またはロックアウト済みであること。
+void flash_meta_set_rom(const uint8_t *rom_title_11);
+
+// ROM メタデータをクリアする（次回起動時に SD からの再ロードを強制する）。
+// メニュー UI から「ROM リロード」操作に使う。
+// Core 1 ロックアウト済みであること。
+void flash_meta_clear_rom(void);
+
+// ── SRAM セーブメタデータ ──────────────────────────────────────────────────
+// SRAM セーブが有効かつ rom_title_11 が一致するかを返す。
+// 異なる ROM のセーブデータが読み込まれるクロス汚染を防ぐ。
+bool flash_meta_sram_valid(const uint8_t *rom_title_11);
+
+// SRAM セーブ後に呼ぶ。Core 1 ロックアウト済みであること。
+void flash_meta_set_sram(const uint8_t *rom_title_11);
+
+// SRAM セーブをクリアする。メニュー UI から「セーブデータ削除」に使う。
+// Core 1 ロックアウト済みであること。
+void flash_meta_clear_sram(void);

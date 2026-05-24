@@ -45,6 +45,7 @@ add_executable(picocalc_gb_kaeru
     src/storage/storage_sd.c
     src/storage/rom_flash.c
     src/storage/save_flash.c
+    src/storage/flash_meta.c
     src/storage/save_sram.c
     src/storage/save_state.c
     src/audio/audio_pwm.c

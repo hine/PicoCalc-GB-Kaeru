@@ -1,4 +1,6 @@
 #include "save_flash.h"
+#include "flash_meta.h"
+#include "rom_flash.h"
 #include "gb/gb_core.h"
 #include "hardware/flash.h"
 #include "hardware/sync.h"
@@ -35,15 +37,14 @@ static void flash_write(uint32_t flash_offset, const uint8_t *src, size_t size) 
 void save_flash_sram_save(const uint8_t *ram, size_t size) {
     if (size == 0 || size > SAVE_FLASH_SRAM_SIZE) return;
     flash_write(SAVE_FLASH_SRAM_OFFSET, ram, size);
+    flash_meta_set_sram(rom_flash_ptr() + 0x0134);
 }
 
 int save_flash_sram_load(uint8_t *ram, size_t size) {
     if (size == 0) return 1;
+    // マジック + ROM タイトル照合で有効性確認（ゴミデータや別 ROM のセーブを弾く）
+    if (!flash_meta_sram_valid(rom_flash_ptr() + 0x0134)) return 1;
     const uint8_t *ptr = (const uint8_t *)(XIP_BASE + SAVE_FLASH_SRAM_OFFSET);
-    // 全バイト 0xFF なら未書き込み
-    bool blank = true;
-    for (size_t i = 0; i < size && blank; i++) blank = (ptr[i] == 0xFF);
-    if (blank) return 1;
     memcpy(ram, ptr, size);
     return 0;
 }

@@ -9,6 +9,7 @@
 #include "storage/storage_sd.h"
 #include "storage/rom_flash.h"
 #include "storage/save_flash.h"
+#include "storage/flash_meta.h"
 #include "audio/audio_pwm.h"
 #include "gb/gb_core.h"
 
@@ -206,27 +207,50 @@ int main()
     lcd_clear();
     lcd_print_string("PicoCalc GB Kaeru\n\n");
 
-    lcd_print_string("Mounting SD");
-    sleep_ms(1000);
-    int fr = FR_NOT_READY;
-    while (fr != FR_OK) {
-        sd_unmount();
-        sleep_ms(500);
-        fr = sd_mount();
-        lcd_print_string(fr == FR_OK ? "\n" : ".");
-    }
-    lcd_print_string("Mount OK\n\n");
+    // ROM が Flash に記録済みなら SD なしで起動可能
+    bool rom_in_flash = flash_meta_rom_valid();
+    lcd_print_string(rom_in_flash ? "ROM: Flash OK\n" : "ROM: SD required\n");
 
-    int rc = rom_flash_ensure(ROM_PATH);
-    if (rc != 0) {
-        char buf[40];
-        snprintf(buf, sizeof(buf), "Flash FAILED: %d\n", rc);
-        lcd_print_string(buf);
-        while (true) tight_loop_contents();
+    bool sd_mounted = false;
+    lcd_print_string("SD: ");
+    if (!rom_in_flash) {
+        // ROM が Flash にない → SD 必須（リトライあり）
+        sleep_ms(1000);
+        int fr = FR_NOT_READY;
+        while (fr != FR_OK) {
+            sd_unmount();
+            sleep_ms(500);
+            fr = sd_mount();
+            lcd_print_string(fr == FR_OK ? "OK\n" : ".");
+        }
+        sd_mounted = true;
+    } else {
+        // ROM は Flash 済み → SD はオプション（1回だけ試みる）
+        sleep_ms(500);
+        if (sd_mount() == FR_OK) {
+            sd_mounted = true;
+            lcd_print_string("OK\n");
+        } else {
+            lcd_print_string("(skip)\n");
+        }
+    }
+
+    if (sd_mounted) {
+        int rc = rom_flash_ensure(ROM_PATH);
+        if (rc == 0) {
+            // ROM 確認・書き込み成功 → メタデータに記録
+            flash_meta_set_rom(rom_flash_ptr() + 0x0134);
+        } else if (!rom_in_flash) {
+            char buf[40];
+            snprintf(buf, sizeof(buf), "ROM FAILED: %d\n", rc);
+            lcd_print_string(buf);
+            while (true) tight_loop_contents();
+        }
+        // rc != 0 かつ rom_in_flash の場合: SD の ROM 確認失敗だが Flash の ROM で続行
     }
 
     lcd_print_string("Starting emulator...\n");
-    rc = gb_core_init();
+    int rc = gb_core_init();
     if (rc != 0) {
         char buf[40];
         snprintf(buf, sizeof(buf), "GB init FAILED: %d\n", rc);
@@ -296,10 +320,9 @@ int main()
                 lcd_status_top_text("Sleep...");
                 // スリープ用ステート保存（Core 1 リセット済みなのでロックアウト不要）
                 save_flash_state_save(SAVE_FLASH_SLEEP_SLOT);
-                // dirty な cart RAM もここで保存
-                if (gb_core_is_dirty() && gb_core_save_size() > 0) {
+                // cart RAM を無条件に保存（consume_dirty で毎フレームクリアされるため dirty チェック不可）
+                if (gb_core_save_size() > 0) {
                     save_flash_sram_save(gb_core_cart_ram_ptr(), gb_core_save_size());
-                    gb_core_clear_dirty();
                 }
                 lcd_status_storage_icon(STORAGE_ICON_OFF);
                 kbd_set_backlight(0);
@@ -383,7 +406,7 @@ int main()
         }
 
         // ゲーム内セーブ検出: cart RAM への書き込みが止まってから ~1秒後に Flash へ保存
-        if (gb_core_is_dirty()) sram_dirty_countdown = 60;
+        if (gb_core_consume_dirty()) sram_dirty_countdown = 60;
         if (sram_dirty_countdown > 0 && --sram_dirty_countdown == 0
                 && gb_core_save_size() > 0) {
             mutex_enter_blocking(&g_lcd_mutex);
@@ -393,7 +416,6 @@ int main()
             multicore_lockout_start_blocking();
             save_flash_sram_save(gb_core_cart_ram_ptr(), gb_core_save_size());
             multicore_lockout_end_blocking();
-            gb_core_clear_dirty();
 
             mutex_enter_blocking(&g_lcd_mutex);
             lcd_status_storage_icon(STORAGE_ICON_OFF);

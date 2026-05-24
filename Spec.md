@@ -123,44 +123,38 @@ cmake --build build
 
 ## 5. ソフトウェア構成
 
-### 5.1 ディレクトリ構成案
+### 5.1 ディレクトリ構成（現状）
 
 ```
-picocalc-gb/
-  Spec.md
-  README.md
+picocalc-gb-kaeru/
+  Spec.md / PROGRESS.md / HardwareSpec.md / README.md
   CMakeLists.txt
+  hw_config.c              # FatFs_SPI ハードウェア設定
+  compat/hardware/rtc.h   # RP2350 で廃止された hardware_rtc のスタブ
   src/
     main.c
-    platform/
-      platform_picocalc.c
-      platform_picocalc.h
     video/
-      video_lcd.c
-      video_lcd.h
+      video_lcd.h          # LCD API（lcd_init / lcd_gb_frame_delta 等）
+      video_lgfx.cpp       # LovyanGFX 実装（ILI9488、差分描画、ステータスバー）
+      lgfx_config.hpp      # LovyanGFX パネル設定
     input/
-      input_keyboard.c
-      input_keyboard.h
+      input_keyboard.c/h   # STM32 キーボードコントローラ I2C ポーリング
     audio/
-      audio_pwm.c
-      audio_pwm.h
+      audio_pwm.c/h        # PWM 12bit + DMA IRQ ダブルバッファ（Core 1）
     storage/
-      storage_sd.c
-      storage_sd.h
-    system/
-      save_state.c
-      save_state.h
-      config.c
-      config.h
+      storage_sd.c/h       # SD マウント/アンマウント
+      rom_flash.c/h        # ROM を Flash XIP に書き込み・検証
+      save_flash.c/h       # SRAM セーブ・セーブステートを Flash に保存
+      flash_meta.c/h       # Flash メタデータ（ROM 有効フラグ・SRAM 検証）
+      save_sram.c/h        # SD バックアップ用 SRAM 保存（将来の UI から呼び出し）
+      save_state.c/h       # SD バックアップ用ステート保存（将来の UI から呼び出し）
   emu/
     gb/
-      gb_core.c
-      gb_core.h
-  roms/
-    .gitkeep
-  saves/
-    .gitkeep
-  tools/
+      gb_core.c/h          # Peanut-GB ラッパー（ROM XIP・APU・セーブステート統合）
+  lib/
+    peanut-gb/             # GB/GBC エミュレーションコア（ヘッダオンリー）
+    LovyanGFX/             # LCD ドライバライブラリ
+    no-OS-FatFS-SD-SPI-RPi-Pico/  # FatFS + SPI SD ドライバ
 ```
 
 ### 5.2 Git管理方針
@@ -246,81 +240,114 @@ PicoCalcのLCD解像度に応じて、以下のいずれかの表示方式を採
 
 ## 8. 入力仕様
 
-### 8.1 Game Boy入力
+### 8.1 現在のキーマッピング（実装済み）
 
-Game Boyの基本入力：
+| GB入力 | 主キー | 副キー |
+|---|---|---|
+| Up | カーソル↑ | W |
+| Down | カーソル↓ | S |
+| Left | カーソル← | A |
+| Right | カーソル→ | D |
+| A ボタン | `,` | `[` |
+| B ボタン | `.` | `]` |
+| Start | BS（Backspace） | — |
+| Select | Del | — |
 
-| GB入力 | PicoCalc入力候補 |
+### 8.2 システムキー（ゲームに渡さない）
+
+| キー | 機能 |
 |---|---|
-| Up | カーソル上 |
-| Down | カーソル下 |
-| Left | カーソル左 |
-| Right | カーソル右 |
-| A | 任意キー |
-| B | 任意キー |
-| Start | Enter |
-| Select | SpaceまたはTab |
-| Menu | Esc |
+| F1 | スリープ（dormant）/ 復帰 |
+| F2 | セーブステート保存（現在スロット） |
+| F3 | セーブスロット切り替え（0〜9 サイクル） |
+| F4 | セーブステートロード（現在スロット） |
+| Enter | グローバルメニュー用（将来実装） |
+| Esc | グローバルメニュー用（将来実装） |
 
-### 8.2 キーマッピング
+### 8.3 方針
 
-キーマッピングは設定ファイルまたはソース内定義で変更可能にする。
-
-初期段階では固定定義でよい。
+- WASD は十字キー追加マッピング（カーソルキーと同時使用可）
+- Enter / Esc はゲームキーに割り当てず、将来のメニュー UI 専用に確保
+- キーマッピングは `src/main.c` の `key_to_joypad_bit()` で管理
 
 ---
 
 ## 9. 音声仕様
 
-### 9.1 初期段階
+### 9.1 実装済み構成
 
-初期段階では音声なしで起動確認を優先する。
+| 項目 | 内容 |
+|---|---|
+| 出力方式 | PWM（GP26/GP27、PicoCalc アンプ直結） |
+| 解像度 | 12bit（AUDIO_WRAP=4095） |
+| サンプリング周波数 | 32768 Hz（TIMER_WRAP=4576 @ 150MHz） |
+| バッファ | DMA ダブルバッファ（548 サンプル/バッファ、~33ms レイテンシ） |
+| 駆動方式 | DMA IRQ 駆動（Core 1 で処理、ポーリング不要） |
+| APU コア | minigb_apu（Peanut-GB 同梱、S16 ステレオ） |
+| データ経路 | Core 0: APU → SPSC リングバッファ → Core 1: DMA → PWM |
 
-### 9.2 次段階
+### 9.2 設計上の注意
 
-- PWMまたはDAC相当出力
-- PicoCalc内蔵スピーカー利用
-- 音量調整
-- ミュート
+- I2S DAC 非搭載のため I2S 化は不可（GP26/27 はアンプ直結 PWM 専用）
+- RP2350 デフォルトクロックは 150MHz（125MHz 前提の TIMER_WRAP は音程ズレを生じる）
+- PWM キャリア周波数 = 150MHz / 4096 ≈ 36.6kHz（可聴域外）
 
-### 9.3 優先度
+### 9.3 残課題
 
-音声はゲーム体験上重要だが、初期マイルストーンでは画面・入力・ROM実行を優先する。
+- 音量調整（将来のメニュー UI で設定）
+- ミュート機能
 
 ---
 
 ## 10. ストレージ仕様
 
-### 10.1 ROM読み込み
+### 10.1 基本方針
 
-初期実装では以下のどちらかを採用する。
+SD カードはカード破損リスクがあるため、**ゲームデータの永続保存には Flash を使用する**。SD は初回 ROM ロード時と将来のバックアップ UI のみで使用する。
 
-- Flash内蔵固定ROM
-- SDカード上の固定ファイル読み込み
-
-推奨初期ファイル名：
+### 10.2 Flash レイアウト
 
 ```
-/roms/kaeru.gb
+アドレス       サイズ    用途
+0x000000      1 MB      ファームウェア（Pico SDK ビルド成果物）
+0x100000    512 KB      ROM データ（XIP 直読み）
+0x180000     32 KB      SRAM セーブ（cart RAM の raw dump）
+0x188000    352 KB      セーブステート × 11 スロット（0〜9: 通常、10: スリープ用）
+0x1E0000      4 KB      Flash メタデータ（ROM 有効フラグ・SRAM 有効フラグ）
+─────────────────────────────────────────
+計           1.879 MB   使用済み（4 MB Flash に対して余裕あり）
 ```
 
-### 10.2 セーブRAM
+### 10.3 ROM 管理
 
-対応後は以下に保存する。
+- 初回起動時に SD カードの `/roms/kaeru.gb` を Flash に書き込む
+- 2 回目以降は Flash メタデータの ROM 有効フラグを確認し、SD なしで起動可能
+- SD が挿入されている場合は ROM タイトル照合を行い、差分があれば再フラッシュ
+- `flash_meta_clear_rom()` を呼ぶと次回起動時に SD からの再ロードを強制できる
 
-```
-/saves/kaeru.sav
-```
+### 10.4 SRAM セーブ
 
-### 10.3 セーブステート
+- ゲームが cart RAM に書き込んだ後、~1 秒（60 フレーム）のデバウンスを経て自動保存
+- Flash メタデータにマジック + ROM タイトル（11 バイト）を記録し、ロード時に検証
+- 別 ROM・別ビルドのゴミデータを誤ロードしない
+- API: `save_flash_sram_save()` / `save_flash_sram_load()`
+- SD バックアップ用 API（`save_sram.c`）は将来のメニュー UI から呼び出し可能
 
-対応後は以下に保存する。
+### 10.5 セーブステート
 
-```
-/saves/kaeru.slot0.state
-/saves/kaeru.slot1.state
-/saves/kaeru.slot2.state
-```
+- F2 で現在スロットへ保存、F3 でスロット切り替え（0〜9）、F4 でロード
+- スロット 99（index 10）はスリープ専用（F1 スリープ時に自動保存・復帰時に自動ロード）
+- Flash 書き込み時は `multicore_lockout_start/end_blocking()` で Core 1 を一時停止
+- XIP 直読みでロードするためロックアウト不要
+
+### 10.6 ストレージアイコン（右上 8×12px）
+
+| 色 | 意味 |
+|---|---|
+| 白 | 読み込み中（SD / Flash 共通） |
+| 青 | SD 書き込み中 |
+| 黄 | Flash 書き込み中 |
+| 消灯 | アイドル |
 
 ---
 
@@ -347,74 +374,84 @@ PicoCalcを携帯機として利用するため、スリープ・復帰機能を
 
 ## 12. マイルストーン
 
-### Milestone 0: 開発環境構築
+### Milestone 0: 開発環境構築 ✅
 
-- Pico SDK導入
-- CMake/Ninjaビルド確認
-- UF2生成
-- PicoCalcへの書き込み確認
+- Pico SDK 導入・CMake/Ninja ビルド確認・UF2 生成・PicoCalc 書き込み確認
 
-### Milestone 1: PicoCalc基本I/O
+### Milestone 1: PicoCalc 基本 I/O 🔄
 
-- LCD初期化
-- キーボード入力取得
-- SDカード読み込み
-- スピーカー簡易出力
+- ✅ LCD 初期化（LovyanGFX / ILI9488）
+- ✅ キーボード入力取得（STM32 I2C、Core 1 ポーリング）
+- ✅ SD カード読み込み（FatFs_SPI）
+- ⬜ スピーカー簡易出力（音声は Milestone 7 で対応済みだが単体テスト未実施）
 
-### Milestone 2: GBコア組み込み
+### Milestone 2: GB コア組み込み ✅
 
-- GBエミュレーションコアの選定
-- ROM読み込み
-- CPU実行
-- 映像バッファ取得
+- Peanut-GB 採用・ROM XIP 直読み・CPU 実行・映像バッファ取得
 
-### Milestone 3: 画面表示
+### Milestone 3: 画面表示 ✅
 
-- 160×144画面をLCDへ表示
-- フレーム更新
-- 簡易FPS計測
+- 2x スケール（320×288）・LovyanGFX RGB565 差分描画・~60fps
 
-### Milestone 4: 入力対応
+### Milestone 4: 入力対応 ✅
 
-- 十字キー
-- A/B
-- Start/Select
-- Menu
+- カーソルキー・WASD・`,`/`[`=A・`.`/`]`=B・BS=Start・Del=Select
 
-### Milestone 5: 対象ROM起動
+### Milestone 5: 対象 ROM 起動 ✅
 
-- 「カエルのために鐘は鳴る」のタイトル表示
-- ゲーム開始
-- 操作可能状態
+- 「カエルのために鐘は鳴る」タイトル表示・ゲーム開始・操作確認
 
-### Milestone 6: セーブ対応
+### Milestone 6: セーブ対応 ✅
 
-- SRAM保存
-- SRAM読み込み
-- SD保存
+- SRAM 保存 / 読み込み（Flash XIP）・ゲーム内セーブ検出デバウンス・ROM タイトル照合検証
 
-### Milestone 7: 音声対応
+### Milestone 7: 音声対応 🔄
 
-- GB APU出力
-- PicoCalcスピーカー再生
-- 音量調整
+- ✅ GB APU 出力（minigb_apu）・PWM 12bit DMA IRQ・音程補正
+- ⬜ 音量調整（メニュー UI 待ち）
 
-### Milestone 8: GBC対応
+### Milestone 8: GBC 対応 ⬜
 
-- GBC ROM起動
-- カラー表示
-- 必要なMBC対応
+- GBC ROM 起動・カラー表示・MBC 対応
 
-### Milestone 9: 携帯機化
+### Milestone 9: 携帯機化 🔄
 
-- セーブステート
-- スリープ
-- 自動復帰
-- メニューUI
+- ✅ セーブステート（F2/F3/F4）・スリープ（F1）・Flash メタデータ・SD オプション起動
+- ⬜ メニュー UI（ROM リロード・セーブ削除・バックアップ・音量）
+- ⬜ バッテリー残量表示
 
 ---
 
-## 13. 技術的リスク
+## 13. マルチコア構成（実装済み）
+
+### Core 0（メインコア）
+
+- GB エミュレーション実行（`gb_core_run_frame()`）
+- ゲームフレームタイマー（59.727fps = 16743μs）
+- APU サンプル生成 → SPSC リングバッファへ書き込み
+- Flash 書き込み（`multicore_lockout_start/end_blocking()` で Core 1 を一時停止）
+- ゲーム内セーブ検出・セーブステート操作
+
+### Core 1（サブコア）
+
+- LCD フレーム描画（LovyanGFX DMA、`lcd_gb_frame_delta()`）
+- 音声 DMA IRQ 処理（リングバッファ → DMA バッファ → PWM）
+- キーボード I2C ポーリング（`kbd_read_event()`）
+- `multicore_lockout_victim_init()` で Flash 書き込み時の停止に対応
+
+### コア間同期
+
+| 機構 | 用途 |
+|---|---|
+| `mutex_t g_lcd_mutex` | LCD SPI バス排他（Core 0 でアイコン描画時） |
+| `g_lcd_busy` フラグ（volatile） | Core 0→Core 1 フレーム転送通知 |
+| `g_joypad` / `g_function_key`（volatile） | Core 1→Core 0 入力転送 |
+| SPSC リングバッファ（g_afifo）| Core 0→Core 1 音声転送 |
+| `multicore_lockout_*` | Flash 書き込み時の Core 1 停止 |
+
+---
+
+## 14. 技術的リスク
 
 ### 13.1 RAM不足
 
@@ -460,7 +497,7 @@ PicoCalcのLCD、キーボード、SD、音声の接続仕様に依存する。
 
 ---
 
-## 14. 移植性
+## 15. 移植性
 
 本プロジェクトは将来的にESP32-S3端末へ移植する可能性があるため、以下の層を分離する。
 
@@ -476,7 +513,7 @@ PicoCalcのLCD、キーボード、SD、音声の接続仕様に依存する。
 
 ---
 
-## 15. 初期実装方針
+## 16. 初期実装方針
 
 最初の実装では、完成度よりも起動確認を優先する。
 
@@ -495,7 +532,7 @@ PicoCalcのLCD、キーボード、SD、音声の接続仕様に依存する。
 
 ---
 
-## 16. ライセンス・ROM取り扱い
+## 17. ライセンス・ROM取り扱い
 
 ROMファイルはユーザーが所有するもののみを使用する。
 
@@ -505,20 +542,30 @@ ROM、BIOS、商用ゲームデータはリポジトリに含めない。
 
 ---
 
-## 17. 当面のTODO
+## 18. 当面の TODO（2026-05-25 時点）
 
-- PicoCalcのLCD制御方法を確認する
-- PicoCalcのキーボード入力方法を確認する
-- PicoCalcのSDカードアクセス方法を確認する
-- RP2350AボードのPico SDK用board定義を確認する
-- 利用するGBエミュレーションコア候補を調査する
-- まずDMG固定ROM起動を目標に最小実装する
-- ROM/SAVEをGit管理外にする
-- `compile_commands.json` を生成し、AI支援開発しやすくする
+### 優先度高
+
+- [ ] ストレージアイコン色の実機確認（ゲーム内セーブ時の黄アイコンが青に見える問題の調査）
+- [ ] メニュー UI 基本実装（Enter/Esc でオーバーレイ表示）
+  - ROM リロード（`flash_meta_clear_rom()` → 再起動）
+  - セーブデータ削除（`flash_meta_clear_sram()`）
+  - SD バックアップ / リストア
+
+### 優先度中
+
+- [ ] バッテリー残量表示（キーボードコントローラ I2C レジスタ 0x0B）
+- [ ] 音量調整（メニュー UI から PWM デューティ比を変更）
+
+### 優先度低
+
+- [ ] GBC 対応（Milestone 8）
+- [ ] FPS 表示
+- [ ] 複数 ROM サポート（ROM ファイル選択 UI）
 
 ---
 
-## 18. エミュレーションコア選定方針
+## 19. エミュレーションコア選定方針
 
 ### 18.1 基本方針
 

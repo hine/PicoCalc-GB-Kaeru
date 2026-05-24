@@ -104,6 +104,7 @@ size_t gb_core_save_size(void)       { return g_save_size; }
 uint8_t *gb_core_cart_ram_ptr(void)  { return ctx.cart_ram; }
 bool gb_core_is_dirty(void)          { return g_cart_dirty; }
 void gb_core_clear_dirty(void)       { g_cart_dirty = false; }
+bool gb_core_consume_dirty(void)     { bool d = g_cart_dirty; g_cart_dirty = false; return d; }
 
 void gb_core_run_frame(void)
 {
