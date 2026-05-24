@@ -16,9 +16,31 @@ endif()
 
 add_subdirectory(lib/no-OS-FatFS-SD-SPI-RPi-Pico/FatFs_SPI)
 
+# ── LovyanGFX (pico_sdk_init の二重呼び出しを避けるため手動統合) ──────────────
+set(LGFX_DIR ${CMAKE_CURRENT_SOURCE_DIR}/lib/LovyanGFX/src)
+file(GLOB LGFX_SRCS
+    ${LGFX_DIR}/lgfx/utility/*.c
+    ${LGFX_DIR}/lgfx/v1/*.cpp
+    ${LGFX_DIR}/lgfx/v1/misc/*.cpp
+    ${LGFX_DIR}/lgfx/v1/panel/*.cpp
+    ${LGFX_DIR}/lgfx/v1/platforms/rp2040/*.cpp
+    ${LGFX_DIR}/lgfx/v1/touch/*.cpp
+)
+add_library(LovyanGFX STATIC ${LGFX_SRCS})
+target_include_directories(LovyanGFX PUBLIC ${LGFX_DIR})
+target_compile_definitions(LovyanGFX PUBLIC USE_PICO_SDK)
+target_link_libraries(LovyanGFX PUBLIC
+    pico_stdlib
+    hardware_spi
+    hardware_i2c
+    hardware_dma
+    hardware_gpio
+    hardware_pwm
+)
+
 add_executable(picocalc_gb_kaeru
     src/main.c
-    src/video/video_lcd.c
+    src/video/video_lgfx.cpp
     src/input/input_keyboard.c
     src/storage/storage_sd.c
     src/storage/rom_flash.c
@@ -50,6 +72,7 @@ target_link_libraries(picocalc_gb_kaeru
     hardware_dma
     hardware_powman
     FatFs_SPI
+    LovyanGFX
 )
 
 target_compile_definitions(picocalc_gb_kaeru PRIVATE

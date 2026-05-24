@@ -23,19 +23,42 @@
 
 // LPOSC 駆動の AON タイマーアラームで 10 秒後に起床する dormant に入る。
 // switched core と XIP cache をオフにして消費電力を最小化。
-// チップは dormant 後に ROM ブートローダから再起動する（この関数は戻らない）。
+// 成功時: チップは dormant 後に ROM ブートローダから再起動する（戻らない）。
+// 失敗時: scratch をクリアして戻る（呼び出し元はエラー処理する）。
+// 注意: 呼び出し前に frame_timer と audio DMA IRQ を停止すること。
 static void go_dormant(void) {
+    // save_and_disable_interrupts() は使わない。
+    // PRIMASK=1 で IRQ がペンディングしていると WFI がすぐ返り、
+    // powman が dormant 遷移の中途半端な状態になってシステムがクラッシュする。
+
     powman_hw->scratch[0] = SLEEP_MAGIC;
+
+    // AON タイマーを LPOSC (~32kHz) で起動
     powman_timer_set_1khz_tick_source_lposc();
+    if (!powman_timer_is_running()) powman_timer_start();
+
+    // 10 秒後に起床
     powman_enable_alarm_wakeup_at_ms(powman_timer_get_ms() + 10000);
+
+    // スリープ/復帰状態を構成
     powman_power_state sleep_state = powman_get_power_state();
     sleep_state = powman_power_state_with_domain_off(
         sleep_state, POWMAN_POWER_DOMAIN_SWITCHED_CORE);
     sleep_state = powman_power_state_with_domain_off(
         sleep_state, POWMAN_POWER_DOMAIN_XIP_CACHE);
-    powman_configure_wakeup_state(sleep_state, powman_get_power_state());
+    powman_power_state wake_state = powman_get_power_state();  // 全ドメインON
+
+    if (!powman_configure_wakeup_state(sleep_state, wake_state)) {
+        powman_hw->scratch[0] = 0;
+        return;  // 設定失敗: 呼び出し元でフォールバック処理
+    }
+
     powman_set_power_state(sleep_state);
-    while (1) tight_loop_contents();
+    __dsb();
+    __wfi();  // ← ここでコアが停止、dormant 開始。起床時は ROM から再起動。
+
+    // 通常ここには到達しない（dormant に入れなかった場合のガード）
+    powman_hw->scratch[0] = 0;
 }
 
 // Core 1 がキーボードをポーリングし、ここへ書く。Core 0 は読むだけ。
@@ -131,6 +154,9 @@ int main()
     lcd_print_string("PicoCalc GB Kaeru\n\n");
 
     lcd_print_string("Mounting SD");
+    // PicoCalc の SD/KB は遅延起動する。旧 lcd_init() の ~240ms RST 待ちがバッファ役を
+    // 果たしていたが LovyanGFX は ~20ms で完了するため、明示的に待機する。
+    sleep_ms(1000);
     int fr = FR_NOT_READY;
     while (fr != FR_OK) {
         sd_unmount();
@@ -204,12 +230,20 @@ int main()
             char msg[9];
             if (fkey == KEY_F1) {
                 // スリープ: ゲーム状態を保存して dormant へ（戻らない）
+                // Core 1 を先に停止: kbd_set_backlight と I2C1 が競合するのを防ぐ
+                multicore_reset_core1();
+                kbd_init();  // Core 1 が途中だった I2C1 トランザクションをリセット
+
                 lcd_status_sd_icon(1);
                 lcd_status_top_text("Sleep...");
-                save_state_save(SLEEP_SLOT);
+                save_state_save(SLEEP_SLOT);  // SD(SPI0) - I2C と競合しない
                 lcd_status_sd_icon(0);
-                kbd_set_backlight(0);
-                multicore_reset_core1();
+                kbd_set_backlight(0);  // Core 1 停止済みなので I2C1 安全
+
+                // dormant 前に周期 IRQ を停止（ペンディング IRQ が WFI を妨げる）
+                cancel_repeating_timer(&frame_timer);
+                audio_pwm_stop();
+
                 go_dormant();
             } else if (fkey == KEY_F3) {
                 g_state_slot = (g_state_slot + 1) % N_STATE_SLOTS;

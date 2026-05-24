@@ -86,6 +86,14 @@ void audio_pwm_init(void)
     dma_channel_start(dma_chan);
 }
 
+void audio_pwm_stop(void) {
+    if (dma_chan < 0) return;
+    dma_channel_set_irq1_enabled(dma_chan, false);
+    dma_channel_abort(dma_chan);
+    pwm_set_enabled(AUDIO_PWM_SLICE, false);
+    pwm_set_enabled(TIMER_PWM_SLICE, false);
+}
+
 void audio_pwm_submit(const int16_t *samples, int n_pairs)
 {
     if (!buf_needs_fill) return;

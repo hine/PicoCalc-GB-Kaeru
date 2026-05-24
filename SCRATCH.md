@@ -5,6 +5,48 @@
 
 ---
 
+## [保留] Milestone 9: dormant スリープ (2026-05-24)
+
+### 現状（保留時点）
+
+- 電源ボタン: 修正後は正常動作するようになった ✅
+- バックライト消灯: F1 後も消えない ❌
+- dormant 遷移: 10 秒待っても画面変化なし → dormant 未達 ❌
+- 代替運用: F2 セーブステート + 電源断で事実上のスリープとして運用中
+
+### 試みた修正と結果
+
+| 修正 | 結果 |
+|---|---|
+| `tight_loop_contents()` → `__wfi()` に変更 | 電源ボタン復活、dormant は未達 |
+| `save_and_disable_interrupts()` 削除 | 変化なし |
+| `multicore_reset_core1()` を `kbd_set_backlight()` 前に移動 + `kbd_init()` | バックライトは依然消えない |
+| `cancel_repeating_timer()` + `audio_pwm_stop()` を dormant 前に追加 | 変化なし |
+
+### 残る仮説
+
+1. **`powman_configure_wakeup_state()` が false を返している**
+   - SWITCHED_CORE ドメインオフの組み合わせが RP2350 の powman で未対応の可能性
+   - 失敗時に scratch[0] をクリアして return するため、電源ボタンは復活する
+   - 確認方法: return 値を LCD に表示して実機確認
+
+2. **バックライト**
+   - `kbd_set_backlight(0)` が成功しても STM32 が消灯しない可能性
+   - 確認方法: I2C write の return 値を確認する
+
+3. **正しい dormant API の使い方**
+   - `pico_sleep` ライブラリの `sleep_goto_sleep_until()` 等の高レベル API が適切かもしれない
+   - RP2350 の powman を直接操作する正しい手順を再調査する必要がある
+
+### 次回再調査時の手順
+
+1. `powman_configure_wakeup_state()` の戻り値を LCD に表示する
+2. `kbd_set_backlight()` の戻り値を確認する
+3. `pico_sleep` ライブラリ（`hardware/sleep.h`）の RP2350 向け実装を調査する
+4. PicoCalc フォーラムで RP2350 dormant の成功例を探す
+
+---
+
 ## [一時保留] Milestone 7: 音声対応 (2026-05-23)
 
 ### 設計方針
