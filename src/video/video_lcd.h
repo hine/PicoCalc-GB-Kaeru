@@ -27,8 +27,16 @@ void lcd_gb_frame_invalidate(void);
 // 下部 16px ストリップ (y=304-319) にキーヒントを描画する（起動時に一度だけ呼ぶ）。
 void lcd_status_draw_hints(void);
 
-// 上部 16px ストリップ右端に SD アクセスインジケーターを表示/消去する。
-void lcd_status_sd_icon(int active);
+// 上部 16px ストリップ右端にストレージアクセスインジケーターを表示する。
+// 白=読み込み中（SD/Flash 共通）、青=SD 書き込み中、黄=Flash 書き込み中、0=消灯
+typedef enum {
+    STORAGE_ICON_OFF   = 0,
+    STORAGE_ICON_READ  = 1,  // 白: SD / Flash 読み込み
+    STORAGE_ICON_SD    = 2,  // 青: SD 書き込み
+    STORAGE_ICON_FLASH = 3,  // 黄: Flash 書き込み
+} storage_icon_t;
+
+void lcd_status_storage_icon(storage_icon_t state);
 
 // 上部 16px ストリップ左側に最大 8 文字のメッセージを表示する。
 void lcd_status_top_text(const char *msg);

@@ -120,9 +120,14 @@ void lcd_status_draw_hints(void) {
     lcd.endWrite();
 }
 
-void lcd_status_sd_icon(int active) {
-    // 上部ストリップ右端 (x=310, y=2, 8×12px) に SD アクセスインジケーター
-    uint32_t color = active ? lcd.color888(255, 200, 0) : TFT_BLACK;
+void lcd_status_storage_icon(storage_icon_t state) {
+    uint32_t color;
+    switch (state) {
+        case STORAGE_ICON_READ:  color = lcd.color888(255, 255, 255); break;  // 白: 読み込み
+        case STORAGE_ICON_SD:    color = lcd.color888(64,  160, 255); break;  // 青: SD 書き込み
+        case STORAGE_ICON_FLASH: color = lcd.color888(255, 200,   0); break;  // 黄: Flash 書き込み
+        default:                 color = TFT_BLACK;                   break;  // 消灯
+    }
     lcd.fillRect(310, 2, 8, 12, color);
 }
 

@@ -8,19 +8,15 @@
 #include "input/input_keyboard.h"
 #include "storage/storage_sd.h"
 #include "storage/rom_flash.h"
-#include "storage/save_sram.h"
-#include "storage/save_state.h"
+#include "storage/save_flash.h"
 #include "audio/audio_pwm.h"
 #include "gb/gb_core.h"
 
 #define ROM_PATH  "0:/roms/kaeru.gb"
-#define SAVE_PATH "0:/saves/kaeru.sav"
-#define AUTOSAVE_INTERVAL_US (30 * 1000 * 1000)
 
 // dormant スリープ状態を powman_hw->scratch[0] で管理する（AON ドメインで dormant 後も保持）
 #define SLEEP_MAGIC  0xCAFEB0B0u  // dormant 中または dormant 直前
 #define RESUME_MAGIC 0xFEEDBEEFu  // F1 で復帰確定 → 全初期化後にスリープステートロード
-#define SLEEP_SLOT   99           // suspend 用特殊スロット（F3 の 0-9 スロットと重複しない）
 
 // LPOSC 駆動の AON タイマーアラームで 10 秒後に起床する dormant に入る。
 // 成功時: チップは dormant 後に ROM ブートローダから再起動する（戻らない）。
@@ -138,6 +134,8 @@ static uint8_t key_to_joypad_bit(int c) {
 
 // Core 1: 音声 DMA 管理 + LCD フレーム描画 + キーボードポーリング
 static void core1_main(void) {
+    // Flash 書き込み時に Core 0 からロックアウト要求を受け取れるよう登録
+    multicore_lockout_victim_init();
     // 音声 DMA IRQ を Core 1 に登録してから即座に開始
     audio_pwm_init();
 
@@ -241,11 +239,11 @@ int main()
     if (is_resume) {
         powman_hw->scratch[0] = 0;
         lcd_print_string("Resuming...\n");
-        if (save_state_load(SLEEP_SLOT) == 0)
+        if (save_flash_state_load(SAVE_FLASH_SLEEP_SLOT) == 0)
             lcd_gb_frame_invalidate();
     } else {
         if (gb_core_save_size() > 0) {
-            int sr = save_sram_load(SAVE_PATH, gb_core_cart_ram_ptr(), gb_core_save_size());
+            int sr = save_flash_sram_load(gb_core_cart_ram_ptr(), gb_core_save_size());
             if (sr == 0)      lcd_print_string("Save loaded.\n");
             else if (sr == 1) lcd_print_string("No save file.\n");
         }
@@ -273,8 +271,8 @@ int main()
     lcd_clear();
     lcd_status_draw_hints();
 
-    absolute_time_t last_save = get_absolute_time();
     static int16_t audio_buf[GB_AUDIO_SAMPLES_TOTAL];
+    static int sram_dirty_countdown = 0;
     int g_state_slot  = 0;
     int g_top_msg_ttl = 0;
 
@@ -289,15 +287,21 @@ int main()
             char msg[9];
 
             if (fkey == KEY_F1) {
-                // Core 1 を停止してから LCD へ直接アクセス（mutex は不要）
+                // Core 1 を停止してから LCD・Flash へ直接アクセス（mutex 不要）
                 multicore_reset_core1();
-                mutex_init(&g_lcd_mutex);  // Core 1 が保持していた可能性があるためリセット
+                mutex_init(&g_lcd_mutex);
                 kbd_init();
 
-                lcd_status_sd_icon(1);
+                lcd_status_storage_icon(STORAGE_ICON_FLASH);
                 lcd_status_top_text("Sleep...");
-                save_state_save(SLEEP_SLOT);
-                lcd_status_sd_icon(0);
+                // スリープ用ステート保存（Core 1 リセット済みなのでロックアウト不要）
+                save_flash_state_save(SAVE_FLASH_SLEEP_SLOT);
+                // dirty な cart RAM もここで保存
+                if (gb_core_is_dirty() && gb_core_save_size() > 0) {
+                    save_flash_sram_save(gb_core_cart_ram_ptr(), gb_core_save_size());
+                    gb_core_clear_dirty();
+                }
+                lcd_status_storage_icon(STORAGE_ICON_OFF);
                 kbd_set_backlight(0);
 
                 cancel_repeating_timer(&frame_timer);
@@ -306,14 +310,17 @@ int main()
 
             } else if (fkey == KEY_F2) {
                 mutex_enter_blocking(&g_lcd_mutex);
-                lcd_status_sd_icon(1);
+                lcd_status_storage_icon(STORAGE_ICON_FLASH);
                 lcd_status_top_text("Saving..");
                 mutex_exit(&g_lcd_mutex);
 
-                save_state_save(g_state_slot);
+                // Flash 書き込み中は Core 1 をロックアウト
+                multicore_lockout_start_blocking();
+                save_flash_state_save(g_state_slot);
+                multicore_lockout_end_blocking();
 
                 mutex_enter_blocking(&g_lcd_mutex);
-                lcd_status_sd_icon(0);
+                lcd_status_storage_icon(STORAGE_ICON_OFF);
                 snprintf(msg, sizeof(msg), "Saved:%d ", g_state_slot);
                 lcd_status_top_text(msg);
                 mutex_exit(&g_lcd_mutex);
@@ -331,19 +338,20 @@ int main()
                 g_top_text_pending = false;
 
             } else if (fkey == KEY_F4) {
+                // ロード: Flash の XIP 読み取りのみ → ロックアウト不要
                 mutex_enter_blocking(&g_lcd_mutex);
-                lcd_status_sd_icon(1);
+                lcd_status_storage_icon(STORAGE_ICON_READ);
                 lcd_status_top_text("Loading.");
                 mutex_exit(&g_lcd_mutex);
 
-                int r = save_state_load(g_state_slot);
+                int r = save_flash_state_load(g_state_slot);
 
                 mutex_enter_blocking(&g_lcd_mutex);
-                lcd_status_sd_icon(0);
+                lcd_status_storage_icon(STORAGE_ICON_OFF);
                 if (r == 0) {
                     snprintf(msg, sizeof(msg), "Load:%d  ", g_state_slot);
                     lcd_status_top_text(msg);
-                    lcd_gb_frame_invalidate();  // prev_fb のみ変更、SPI アクセスなし
+                    lcd_gb_frame_invalidate();
                 } else {
                     lcd_status_top_text("No state");
                 }
@@ -374,19 +382,21 @@ int main()
             gb_core_set_fb(g_fb[g_fb_write]);     // 次フレームの書き込み先を更新
         }
 
-        // 30 秒ごとに dirty な cart RAM を SD へ自動セーブ
-        if (gb_core_is_dirty() &&
-            absolute_time_diff_us(last_save, get_absolute_time()) >= AUTOSAVE_INTERVAL_US) {
+        // ゲーム内セーブ検出: cart RAM への書き込みが止まってから ~1秒後に Flash へ保存
+        if (gb_core_is_dirty()) sram_dirty_countdown = 60;
+        if (sram_dirty_countdown > 0 && --sram_dirty_countdown == 0
+                && gb_core_save_size() > 0) {
             mutex_enter_blocking(&g_lcd_mutex);
-            lcd_status_sd_icon(1);
+            lcd_status_storage_icon(STORAGE_ICON_FLASH);
             mutex_exit(&g_lcd_mutex);
 
-            save_sram_save(SAVE_PATH, gb_core_cart_ram_ptr(), gb_core_save_size());
+            multicore_lockout_start_blocking();
+            save_flash_sram_save(gb_core_cart_ram_ptr(), gb_core_save_size());
+            multicore_lockout_end_blocking();
             gb_core_clear_dirty();
-            last_save = get_absolute_time();
 
             mutex_enter_blocking(&g_lcd_mutex);
-            lcd_status_sd_icon(0);
+            lcd_status_storage_icon(STORAGE_ICON_OFF);
             mutex_exit(&g_lcd_mutex);
         }
     }
