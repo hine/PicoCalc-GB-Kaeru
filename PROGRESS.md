@@ -1,6 +1,6 @@
 # 開発進捗
 
-最終更新: 2026-05-25（音声ノイズ解消・テンポ修正・コア構成変更）
+最終更新: 2026-05-25（LCD BGR色順修正・バッテリー表示実装・診断中）
 
 ---
 
@@ -9,12 +9,11 @@
 **Milestone 9: 携帯機化**
 
 次のアクション：
-- [ ] ストレージアイコン色の実機確認（ゲーム内セーブ時に青？黄？→ F2 と比較して色を特定）
+- [~] バッテリー残量表示（UI 実装済み・I2C 0x0B レジスタ raw 値を診断中。`Bt:XXX` で表示確認）
 - [ ] メニュー UI（Enter/Esc をグローバルメニュー操作に使用予定）
   - `flash_meta_clear_rom()` → SD から ROM 再ロード強制
   - `flash_meta_clear_sram()` → セーブデータ削除
   - SD バックアップ/リストア（`save_sram.c` / `save_state.c` は API として維持済み）
-- [ ] バッテリー残量表示（キーボードコントローラ I2C レジスタ 0x0B）
 
 ---
 
@@ -29,7 +28,7 @@
 - [x] pyenv virtualenv 構築（`picocalc_gb_kaeru` / Python 3.13.13）
 - [x] `compile_commands.json` 生成設定
 
-### Milestone 1: PicoCalc 基本I/O 🔄 進行中
+### Milestone 1: PicoCalc 基本I/O ✅ 完了
 
 - [x] PicoCalc LCD 仕様調査（→ `HardwareSpec.md`）
 - [x] PicoCalc キーボード 仕様調査（→ `HardwareSpec.md`）
@@ -77,7 +76,7 @@
 - [x] ゲーム内セーブ検出修正（`gb_core_consume_dirty()` 追加でデバウンスが正常動作、2026-05-25）
 - [x] SD への保存・読み込み（バックアップ用 API として維持、将来のメニュー UI から呼び出し）
 
-### Milestone 7: 音声対応 🔄 進行中
+### Milestone 7: 音声対応 ✅ 完了
 
 - [x] GB APU 出力（minigb_apu 統合、実機確認済み 2026-05-23）
 - [x] PicoCalc スピーカー再生（PWM 12bit + DMA IRQ ダブルバッファ、実機確認済み 2026-05-24）
@@ -105,8 +104,10 @@
 - [x] 音声 DMA IRQ 駆動・PWM 12bit・音程修正（実機確認済み 2026-05-24）
 - [x] 音声 DMA IRQ を Core 0 に移行・ノイズ解消・テンポ修正（実機確認済み 2026-05-25）
 - [x] キーバインド更新（WASD 追加・`[`/`]` AB ボタン・BS=Start/Del=Select、2026-05-24）
+- [x] ILI9488 BGR 色並び順修正（`rgb_order=false`、全色正常表示、実機確認済み 2026-05-25）
+- [x] バッテリー残量表示 UI（上部ストリップ右側、30秒更新、緑/黄/赤、実装済み 2026-05-25）
+- [ ] バッテリー I2C 0x0B レジスタ動作確認（診断中 2026-05-25）
 - [ ] メニュー UI（Enter/Esc 使用予定）
-- [ ] バッテリー残量表示
 
 #### UI レイアウト設計メモ（2026-05-23 検討済み）
 
@@ -139,7 +140,8 @@
 | 2026-05-22 | GBエミュレーションコアは Peanut-GB（ヘッダオンリー）を採用 | 軽量・移植性高い・RP2350 実績あり |
 | 2026-05-23 | LovyanGFX 導入は Milestone 9 まで先送り | ILI9488 対応・CMake 統合（add_subdirectory）とも問題ないが、現在の DMA delta 描画は既に ~60fps で十分。音声対応への寄与もなし。メニュー UI 実装時に改めて評価する |
 | 2026-05-24 | LovyanGFX 移行完了。RGB565 + swap=true を採用 | RGB888 よりバッファ 1/3 小さく代入も軽い。ILI9488 は常に 18bit 送信のため SPI 帯域は同じ。色精度はパレット数値で後調整可能 |
-| 2026-05-24 | lgfx_config: invert=true 必須、rgb_order=true、setRotation(6) | ILI9488 パネルは自然反転あり → INVON で補正。setRotation(6)=MX=0/MY=0 が正常ポートレート（0=左右反転、4=180°）|
+| 2026-05-24 | lgfx_config: invert=true 必須、~~rgb_order=true~~→**false**、setRotation(6) | ILI9488 パネルは自然反転あり → INVON で補正。setRotation(6)=MX=0/MY=0 が正常ポートレート（0=左右反転、4=180°）|
+| 2026-05-25 | ILI9488 パネルは BGR 色並び順（MADCTL bit3=1）→ `rgb_order=false` に修正 | `rgb_order=true`（RGB 送信）では R↔B が反転し、DMG グリーンがティール、黄色アイコンが青く表示された。MADCTL=0x48 の bit3=BGR フラグを見落としていた。実機で全色正常表示を確認済み |
 | 2026-05-24 | UI テキストを textSize=1（等倍）に統一 | 起動画面・ステータスバーはゲームループ外で速度影響ゼロ。Font0 6×8px、16px ストリップ内 Y+4 で縦中央揃え |
 | 2026-05-24 | LovyanGFX SD タイミング問題を sleep_ms(1000) で修正 | 旧 lcd_init() は RST 後 ~240ms 待機し SD 起動猶予を確保していた。LovyanGFX は ~20ms で完了するため SD がマウント失敗。明示的 sleep で解決 |
 | 2026-05-24 | go_dormant(): __wfi() 方式に変更、IRQ 停止必須化 | tight_loop_contents() では WFI が発行されず dormant に入れなかった。PRIMASK=1 + ペンディング IRQ でも WFI がすぐ返るため、frame_timer と audio DMA を先に停止してから呼ぶこと |
@@ -180,10 +182,11 @@
 
 | 項目 | 内容 |
 |---|---|
-| LCDコントローラ世代 | 所有する PicoCalc が ILI9488 か ST7365P かは実機確認が必要 |
+| LCDコントローラ世代 | **ILI9488（確認済み）**。BGR 色並び順（MADCTL=0x48）・`rgb_order=false` で正常動作。ST7365P との互換性は ILI9488 設定で動作しているため実機確認不要 |
+| バッテリー I2C 0x0B | キーボードコントローラのレジスタ 0x0B が 0 を返す。ファームウェア未実装の可能性あり。診断ビルドで raw 値を確認中 |
 | GBCエミュコア | GBC対応は Milestone 8 まで保留。Walnut-CGB の評価は Milestone 2 で実施 |
 | PSRAM 活用 | RP2350 + PicoCalc に PSRAM がある場合、フレームバッファ拡張に活用可能 |
-| 音声方式 | PWM 12bit（GP26/27、DMA IRQ 駆動、Core 0 処理）で安定動作中。I2S DAC 非搭載のため I2S 化は不可。残課題は音量調整のみ |
+| 音声方式 | PWM 12bit（GP26/27、DMA IRQ 駆動、Core 0 処理）で安定動作中。I2S DAC 非搭載のため I2S 化は不可 |
 | RTC / タイムスタンプ | 現状 no-op スタブ。セーブステート複数管理時に要再検討（下記参照） |
 
 ---
