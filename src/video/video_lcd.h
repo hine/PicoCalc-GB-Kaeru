@@ -27,6 +27,8 @@ void lcd_gb_frame_invalidate(void);
 
 // 下部 16px ストリップ (y=304-319) にキーヒントを描画する（起動時に一度だけ呼ぶ）。
 void lcd_status_draw_hints(void);
+// 上部 16px ストリップ中央 (x=52..281) に F1-F4 キーバインドを描画する（起動時に一度だけ呼ぶ）。
+void lcd_status_draw_fkey_hints(void);
 
 // 上部 16px ストリップ右端にストレージアクセスインジケーターを表示する。
 // 白=読み込み中（SD/Flash 共通）、青=SD 書き込み中、黄=Flash 書き込み中、0=消灯

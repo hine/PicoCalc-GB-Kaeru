@@ -47,11 +47,11 @@ static void apply_palette(int idx) {
 // 上部: y=0..15 (16px), 下部: y=304..319 (16px)
 #define STATUS_BOTTOM_Y   304
 #define STATUS_BOTTOM_BG  lcd.color888(24, 24, 24)
-#define STATUS_HINT_FG    lcd.color888(128, 128, 128)
+#define STATUS_HINT_FG    lcd.color888(200, 200, 200)
 
 // Font0 (6×8) textSize=1 → 6×8px/char → 320/6 = 53文字/行
 // ヒントテキストは 53 文字以内に収める（16px ストリップに Y+4 で縦中央揃え）
-static const char HINTS[] = ",/[=A  ./]=B  BS=Sta  Del=Sel";
+static const char HINTS[] = "ESC=Menu ,/[=A ./]=B Ent/BS=St Del=Sel WASD/^v<>=Dir";
 
 void lcd_init(void) {
     lcd.init();
@@ -157,6 +157,19 @@ void lcd_status_draw_hints(void) {
     lcd.setTextColor(STATUS_HINT_FG, STATUS_BOTTOM_BG);
     lcd.setCursor(2, STATUS_BOTTOM_Y + 4);  // 8px フォントを 16px ストリップ内で縦中央に
     lcd.print(HINTS);
+    lcd.endWrite();
+}
+
+// 上部 16px ストリップ中央（x=52..281）に F1-F4 キーバインドを描画する
+void lcd_status_draw_fkey_hints(void) {
+    static const char FHINTS[] = "F1=Reset  F2=Save  F3=Load  F4=Slot";
+    lcd.startWrite();
+    lcd.setFont(&lgfx::fonts::Font0);
+    lcd.setTextSize(1);
+    lcd.fillRect(52, 0, 228, 16, TFT_BLACK);
+    lcd.setTextColor(lcd.color888(200, 200, 200), TFT_BLACK);
+    lcd.setCursor(52, 4);
+    lcd.print(FHINTS);
     lcd.endWrite();
 }
 

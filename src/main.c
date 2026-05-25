@@ -297,6 +297,7 @@ int main()
 
     lcd_clear();
     lcd_status_draw_hints();
+    lcd_status_draw_fkey_hints();
 
     static int16_t audio_buf[GB_AUDIO_SAMPLES_TOTAL];
     static int sram_dirty_countdown = 0;
