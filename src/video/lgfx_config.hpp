@@ -37,7 +37,7 @@ public:
             cfg.offset_rotation = 0;
             cfg.readable        = false; // 書き込み専用: 高速化
             cfg.invert          = true;  // Display Inversion On (ILI9488 パネルの自然反転を補正)
-            cfg.rgb_order       = true;  // RGB (MADCTL bit3=0)
+            cfg.rgb_order       = false; // BGR (MADCTL bit3=1): このパネルは BGR 順のため false
             cfg.dlen_16bit      = false;
             cfg.bus_shared      = false;
             _panel.config(cfg);
