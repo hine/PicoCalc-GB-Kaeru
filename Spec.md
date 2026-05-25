@@ -285,10 +285,9 @@ y=304〜319(16px) 下部: キーヒント（例: ,[=A  .]=B  BS=Sta  Del=Sel）
 - DMA IRQ は Core 0 に登録すること。Core 1 では `multicore_lockout` で停止するため、Flash 書き込み中に TRANS_COUNT=0 のハードウェアチェーン DMA が暴走して「ザザッ」ノイズが発生する
 - AUDIO_SAMPLE_RATE=32800 に設定することで AUDIO_SAMPLES=549（int 切り捨て補正）となり、テンポ誤差を 0.117% → 0.004% に抑制する
 
-### 9.3 残課題
+### 9.3 備考
 
-- 音量調整（将来のメニュー UI で設定）
-- ミュート機能
+- 音量調整は PicoCalc 本体の物理ボリュームで対応するため、ソフトウェア実装は不要
 
 ---
 
@@ -384,12 +383,12 @@ SD カードはカード破損リスクがあるため、**ゲームデータの
 
 - Pico SDK 導入・CMake/Ninja ビルド確認・UF2 生成・PicoCalc 書き込み確認
 
-### Milestone 1: PicoCalc 基本 I/O 🔄
+### Milestone 1: PicoCalc 基本 I/O ✅
 
 - ✅ LCD 初期化（LovyanGFX / ILI9488）
 - ✅ キーボード入力取得（STM32 I2C、Core 1 ポーリング）
 - ✅ SD カード読み込み（FatFs_SPI）
-- ⬜ スピーカー簡易出力（音声は Milestone 7 で対応済みだが単体テスト未実施）
+- ✅ スピーカー出力（Milestone 7 で PWM 12bit DMA IRQ として完了）
 
 ### Milestone 2: GB コア組み込み ✅
 
@@ -411,10 +410,11 @@ SD カードはカード破損リスクがあるため、**ゲームデータの
 
 - SRAM 保存 / 読み込み（Flash XIP）・ゲーム内セーブ検出デバウンス・ROM タイトル照合検証
 
-### Milestone 7: 音声対応 🔄
+### Milestone 7: 音声対応 ✅
 
 - ✅ GB APU 出力（minigb_apu）・PWM 12bit DMA IRQ・音程補正
-- ⬜ 音量調整（メニュー UI 待ち）
+- ✅ Flash 書き込み中ノイズ解消・テンポ修正
+- ℹ️ 音量調整は PicoCalc 本体の物理ボリュームで対応（ソフト実装不要）
 
 ### Milestone 8: GBC 対応 ⬜
 
