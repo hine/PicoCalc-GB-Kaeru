@@ -6,10 +6,8 @@
 #include "hardware/sync.h"
 #include <string.h>
 
-// スロット番号 → Flash 配列インデックス（99=スリープ → 10）
 static int slot_to_idx(int slot) {
-    if (slot == SAVE_FLASH_SLEEP_SLOT) return SAVE_FLASH_STATE_N_SLOTS - 1;
-    if (slot >= 0 && slot < SAVE_FLASH_STATE_N_SLOTS - 1) return slot;
+    if (slot >= 0 && slot < SAVE_FLASH_STATE_N_SLOTS) return slot;
     return -1;
 }
 

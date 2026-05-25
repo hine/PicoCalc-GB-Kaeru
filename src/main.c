@@ -3,7 +3,6 @@
 #include "pico/stdlib.h"
 #include "pico/multicore.h"
 #include "pico/mutex.h"
-#include "hardware/powman.h"
 #include "video/video_lcd.h"
 #include "input/input_keyboard.h"
 #include "storage/storage_sd.h"
@@ -18,37 +17,6 @@
 #define SRAM_SD_PATH "0:/saves/kaeru.sav"
 
 #define ROM_PATH  "0:/roms/kaeru.gb"
-
-// dormant スリープ状態を powman_hw->scratch[0] で管理する（AON ドメインで dormant 後も保持）
-#define SLEEP_MAGIC  0xCAFEB0B0u  // dormant 中または dormant 直前
-#define RESUME_MAGIC 0xFEEDBEEFu  // F1 で復帰確定 → 全初期化後にスリープステートロード
-
-// LPOSC 駆動の AON タイマーアラームで 10 秒後に起床する dormant に入る。
-// 成功時: チップは dormant 後に ROM ブートローダから再起動する（戻らない）。
-// 失敗時: scratch をクリアして戻る（呼び出し元はエラー処理する）。
-// 注意: 呼び出し前に frame_timer と audio DMA IRQ を停止すること。
-static void go_dormant(void) {
-    powman_hw->scratch[0] = SLEEP_MAGIC;
-    powman_timer_set_1khz_tick_source_lposc();
-    if (!powman_timer_is_running()) powman_timer_start();
-    powman_enable_alarm_wakeup_at_ms(powman_timer_get_ms() + 10000);
-
-    powman_power_state sleep_state = powman_get_power_state();
-    sleep_state = powman_power_state_with_domain_off(
-        sleep_state, POWMAN_POWER_DOMAIN_SWITCHED_CORE);
-    sleep_state = powman_power_state_with_domain_off(
-        sleep_state, POWMAN_POWER_DOMAIN_XIP_CACHE);
-    powman_power_state wake_state = powman_get_power_state();
-
-    if (!powman_configure_wakeup_state(sleep_state, wake_state)) {
-        powman_hw->scratch[0] = 0;
-        return;
-    }
-    powman_set_power_state(sleep_state);
-    __dsb();
-    __wfi();
-    powman_hw->scratch[0] = 0;
-}
 
 // ── Core 間共有: ジョイパッド / F キー / メニュー入力 ────────────────────────
 // Core 1 が書く / Core 0 が読む。uint8_t / int 書き込みは ARM で atomic なので mutex 不要。
@@ -186,7 +154,7 @@ static void core1_main(void) {
             }
             if (pressed &&
                 (c == KEY_F1 || c == KEY_F2 || c == KEY_F3 || c == KEY_F4 ||
-                 c == KEY_F5 || c == KEY_ESC))
+                 c == KEY_ESC))
                 g_function_key = (uint8_t)c;
             if (pressed)
                 g_menu_key = c;  // Core 0 の menu_tick が消費する
@@ -231,24 +199,6 @@ static void core1_main(void) {
 
 int main()
 {
-    // ─── dormant 復帰チェック ────────────────────────────────────────────────
-    if (powman_hw->scratch[0] == SLEEP_MAGIC) {
-        powman_hw->scratch[0] = 0;
-        kbd_init();
-        sleep_ms(200);
-
-        bool resume = false;
-        for (int i = 0; i < 10 && !resume; i++) {
-            if (kbd_read() == KEY_F1) resume = true;
-            else sleep_ms(50);
-        }
-
-        if (!resume) {
-            go_dormant();
-        }
-        powman_hw->scratch[0] = RESUME_MAGIC;
-    }
-
     // ─── 通常起動フロー ──────────────────────────────────────────────────────
     stdio_init_all();
     kbd_init();
@@ -308,19 +258,11 @@ int main()
         while (true) tight_loop_contents();
     }
 
-    // ─── セーブ / スリープ復帰ロード ─────────────────────────────────────────
-    bool is_resume = (powman_hw->scratch[0] == RESUME_MAGIC);
-    if (is_resume) {
-        powman_hw->scratch[0] = 0;
-        lcd_print_string("Resuming...\n");
-        if (save_flash_state_load(SAVE_FLASH_SLEEP_SLOT) == 0)
-            lcd_gb_frame_invalidate();
-    } else {
-        if (gb_core_save_size() > 0) {
-            int sr = save_flash_sram_load(gb_core_cart_ram_ptr(), gb_core_save_size());
-            if (sr == 0)      lcd_print_string("Save loaded.\n");
-            else if (sr == 1) lcd_print_string("No save file.\n");
-        }
+    // ─── セーブロード ────────────────────────────────────────────────────────
+    if (gb_core_save_size() > 0) {
+        int sr = save_flash_sram_load(gb_core_cart_ram_ptr(), gb_core_save_size());
+        if (sr == 0)      lcd_print_string("Save loaded.\n");
+        else if (sr == 1) lcd_print_string("No save file.\n");
     }
 
     gb_core_set_joypad(0xFF);
@@ -466,72 +408,7 @@ int main()
             char msg[9];
 
             if (fkey == KEY_F1) {
-                // Core 1 を停止してから LCD・Flash へ直接アクセス（mutex 不要）
-                multicore_reset_core1();
-                mutex_init(&g_lcd_mutex);
-                kbd_init();
-
-                lcd_status_storage_icon(STORAGE_ICON_FLASH);
-                lcd_status_top_text("Sleep...");
-                // スリープ用ステート保存（Core 1 リセット済みなのでロックアウト不要）
-                save_flash_state_save(SAVE_FLASH_SLEEP_SLOT);
-                // cart RAM を無条件に保存（consume_dirty で毎フレームクリアされるため dirty チェック不可）
-                if (gb_core_save_size() > 0) {
-                    save_flash_sram_save(gb_core_cart_ram_ptr(), gb_core_save_size());
-                }
-                lcd_status_storage_icon(STORAGE_ICON_OFF);
-                kbd_set_backlight(0);
-
-                cancel_repeating_timer(&frame_timer);
-                audio_pwm_stop();
-                go_dormant();
-
-            } else if (fkey == KEY_F2) {
-                mutex_enter_blocking(&g_lcd_mutex);
-                lcd_status_storage_icon(STORAGE_ICON_FLASH);
-                lcd_status_top_text("Saving..");
-                mutex_exit(&g_lcd_mutex);
-
-                // Flash 書き込み中は Core 1 をロックアウト
-                // DMA IRQ は Core 0 に登録済みなので lockout 中も継続動作する
-                multicore_lockout_start_blocking();
-                save_flash_state_save(g_state_slot);
-                multicore_lockout_end_blocking();
-
-                mutex_enter_blocking(&g_lcd_mutex);
-                lcd_status_storage_icon(STORAGE_ICON_OFF);
-                snprintf(msg, sizeof(msg), "Saved:%d ", g_state_slot);
-                lcd_status_top_text(msg);
-                mutex_exit(&g_lcd_mutex);
-
-                g_top_msg_ttl = 120;
-                g_top_text_pending = false;
-
-            } else if (fkey == KEY_F3) {
-                g_state_slot = (g_state_slot + 1) % N_STATE_SLOTS;
-                snprintf(msg, sizeof(msg), "Slot:%d  ", g_state_slot);
-                mutex_enter_blocking(&g_lcd_mutex);
-                lcd_status_top_text(msg);
-                mutex_exit(&g_lcd_mutex);
-                g_top_msg_ttl = 120;
-                g_top_text_pending = false;
-
-            } else if (fkey == KEY_ESC) {
-                // メニューを開く（frame_timer を停止してゲームをポーズ）
-                cancel_repeating_timer(&frame_timer);
-                g_menu_active = true;  // Core 1 はフレームを描画しない
-                __dmb();
-                g_lcd_busy = false;    // 保留中のフレーム描画要求をキャンセル
-                mutex_enter_blocking(&g_lcd_mutex);
-                menu_open(g_fb[g_lcd_fb_idx],
-                          (uint8_t)lcd_palette_get(),
-                          g_audio_enabled ? 1 : 0,
-                          g_backlight_req);
-                mutex_exit(&g_lcd_mutex);
-                continue;
-
-            } else if (fkey == KEY_F5) {
-                // ソフトリセット: GB エミュレータを再初期化して Flash の SRAM をリロード
+                // F1: ソフトリセット（GB 再初期化 + Flash SRAM リロード）
                 g_lcd_busy = false;
                 sram_dirty_countdown = 0;
                 gb_core_reset();
@@ -546,8 +423,28 @@ int main()
                 g_top_msg_ttl = 120;
                 g_top_text_pending = false;
 
-            } else if (fkey == KEY_F4) {
-                // ロード: Flash の XIP 読み取りのみ → ロックアウト不要
+            } else if (fkey == KEY_F2) {
+                // F2: ステートセーブ
+                mutex_enter_blocking(&g_lcd_mutex);
+                lcd_status_storage_icon(STORAGE_ICON_FLASH);
+                lcd_status_top_text("Saving..");
+                mutex_exit(&g_lcd_mutex);
+
+                multicore_lockout_start_blocking();
+                save_flash_state_save(g_state_slot);
+                multicore_lockout_end_blocking();
+
+                mutex_enter_blocking(&g_lcd_mutex);
+                lcd_status_storage_icon(STORAGE_ICON_OFF);
+                snprintf(msg, sizeof(msg), "Saved:%d ", g_state_slot);
+                lcd_status_top_text(msg);
+                mutex_exit(&g_lcd_mutex);
+
+                g_top_msg_ttl = 120;
+                g_top_text_pending = false;
+
+            } else if (fkey == KEY_F3) {
+                // F3: ステートロード
                 mutex_enter_blocking(&g_lcd_mutex);
                 lcd_status_storage_icon(STORAGE_ICON_READ);
                 lcd_status_top_text("Loading.");
@@ -568,6 +465,30 @@ int main()
 
                 g_top_msg_ttl = 120;
                 g_top_text_pending = false;
+
+            } else if (fkey == KEY_F4) {
+                // F4: ステートスロット変更
+                g_state_slot = (g_state_slot + 1) % N_STATE_SLOTS;
+                snprintf(msg, sizeof(msg), "Slot:%d  ", g_state_slot);
+                mutex_enter_blocking(&g_lcd_mutex);
+                lcd_status_top_text(msg);
+                mutex_exit(&g_lcd_mutex);
+                g_top_msg_ttl = 120;
+                g_top_text_pending = false;
+
+            } else if (fkey == KEY_ESC) {
+                // ESC: メニューを開く（frame_timer を停止してゲームをポーズ）
+                cancel_repeating_timer(&frame_timer);
+                g_menu_active = true;
+                __dmb();
+                g_lcd_busy = false;
+                mutex_enter_blocking(&g_lcd_mutex);
+                menu_open(g_fb[g_lcd_fb_idx],
+                          (uint8_t)lcd_palette_get(),
+                          g_audio_enabled ? 1 : 0,
+                          g_backlight_req);
+                mutex_exit(&g_lcd_mutex);
+                continue;
             }
         }
 
