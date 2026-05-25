@@ -130,7 +130,7 @@ static uint8_t key_to_joypad_bit(int c) {
         case KEY_RIGHT:     case 'd': return JOYPAD_RIGHT;
         case ',':           case '[': return JOYPAD_A;
         case '.':           case ']': return JOYPAD_B;
-        case KEY_BACKSPACE:           return JOYPAD_START;
+        case KEY_BACKSPACE: case KEY_ENTER: return JOYPAD_START;
         case KEY_DEL:                 return JOYPAD_SELECT;
         default:                      return 0;
     }
