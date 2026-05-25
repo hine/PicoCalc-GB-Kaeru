@@ -140,7 +140,7 @@ picocalc-gb-kaeru/
     input/
       input_keyboard.c/h   # STM32 キーボードコントローラ I2C ポーリング
     audio/
-      audio_pwm.c/h        # PWM 12bit + DMA IRQ ダブルバッファ（Core 1）
+      audio_pwm.c/h        # PWM 12bit + DMA IRQ ダブルバッファ（Core 0）
     storage/
       storage_sd.c/h       # SD マウント/アンマウント
       rom_flash.c/h        # ROM を Flash XIP に書き込み・検証
@@ -270,17 +270,20 @@ y=304〜319(16px) 下部: キーヒント（例: ,[=A  .]=B  BS=Sta  Del=Sel）
 |---|---|
 | 出力方式 | PWM（GP26/GP27、PicoCalc アンプ直結） |
 | 解像度 | 12bit（AUDIO_WRAP=4095） |
-| サンプリング周波数 | 32768 Hz（TIMER_WRAP=4576 @ 150MHz） |
-| バッファ | DMA ダブルバッファ（548 サンプル/バッファ、~33ms レイテンシ） |
-| 駆動方式 | DMA IRQ 駆動（Core 1 で処理、ポーリング不要） |
+| サンプリング周波数 | ≈32767 Hz（TIMER_WRAP=4578 @ 150MHz、GB 正規 32768 Hz との誤差 0.004%） |
+| APU 生成レート | 32769 Hz（AUDIO_SAMPLE_RATE=32800 → AUDIO_SAMPLES=549 サンプル/フレーム） |
+| バッファ | DMA ダブルバッファ（549 サンプル/バッファ、~33ms レイテンシ） |
+| 駆動方式 | DMA IRQ 駆動（Core 0 で処理、ポーリング不要） |
 | APU コア | minigb_apu（Peanut-GB 同梱、S16 ステレオ） |
-| データ経路 | Core 0: APU → SPSC リングバッファ → Core 1: DMA → PWM |
+| データ経路 | Core 0 メインループ: APU → SPSC リングバッファ → Core 0 DMA IRQ: DMA → PWM |
 
 ### 9.2 設計上の注意
 
 - I2S DAC 非搭載のため I2S 化は不可（GP26/27 はアンプ直結 PWM 専用）
 - RP2350 デフォルトクロックは 150MHz（125MHz 前提の TIMER_WRAP は音程ズレを生じる）
 - PWM キャリア周波数 = 150MHz / 4096 ≈ 36.6kHz（可聴域外）
+- DMA IRQ は Core 0 に登録すること。Core 1 では `multicore_lockout` で停止するため、Flash 書き込み中に TRANS_COUNT=0 のハードウェアチェーン DMA が暴走して「ザザッ」ノイズが発生する
+- AUDIO_SAMPLE_RATE=32800 に設定することで AUDIO_SAMPLES=549（int 切り捨て補正）となり、テンポ誤差を 0.117% → 0.004% に抑制する
 
 ### 9.3 残課題
 
@@ -431,14 +434,16 @@ SD カードはカード破損リスクがあるため、**ゲームデータの
 
 - GB エミュレーション実行（`gb_core_run_frame()`）
 - ゲームフレームタイマー（59.727fps = 16743μs）
-- APU サンプル生成 → SPSC リングバッファへ書き込み
+- APU サンプル生成 → SPSC リングバッファへ書き込み（producer）
+- 音声 DMA IRQ 処理（リングバッファ → DMA バッファ → PWM）（consumer、IRQ として preempt）
 - Flash 書き込み（`multicore_lockout_start/end_blocking()` で Core 1 を一時停止）
 - ゲーム内セーブ検出・セーブステート操作
+
+> **DMA IRQ を Core 0 に置く理由:** Core 1 では `multicore_lockout` で停止する。また、Flash 書き込み中の割り込み禁止ウィンドウ（~100ms）でシングルチャンネル DMA が停止しても短い無音になるだけで、ハードウェアチェーン DMA のような TRANS_COUNT=0 暴走（「ザザッ」）は発生しない。
 
 ### Core 1（サブコア）
 
 - LCD フレーム描画（LovyanGFX DMA、`lcd_gb_frame_delta()`）
-- 音声 DMA IRQ 処理（リングバッファ → DMA バッファ → PWM）
 - キーボード I2C ポーリング（`kbd_read_event()`）
 - `multicore_lockout_victim_init()` で Flash 書き込み時の停止に対応
 
@@ -449,7 +454,7 @@ SD カードはカード破損リスクがあるため、**ゲームデータの
 | `mutex_t g_lcd_mutex` | LCD SPI バス排他（Core 0 でアイコン描画時） |
 | `g_lcd_busy` フラグ（volatile） | Core 0→Core 1 フレーム転送通知 |
 | `g_joypad` / `g_function_key`（volatile） | Core 1→Core 0 入力転送 |
-| SPSC リングバッファ（g_afifo）| Core 0→Core 1 音声転送 |
+| SPSC リングバッファ（g_afifo）| Core 0 メインループ（producer）→ Core 0 DMA IRQ（consumer）音声転送 |
 | `multicore_lockout_*` | Flash 書き込み時の Core 1 停止 |
 
 ---

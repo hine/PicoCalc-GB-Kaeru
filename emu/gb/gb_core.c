@@ -5,6 +5,11 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+// AUDIO_SAMPLE_RATE=32800 → AUDIO_SAMPLES=549サンプル/フレーム。
+// int(32768/59.7275)=548 の切り捨て誤差を補正し、生成レートを 32769Hz に近づける。
+// DMA側(TIMER_WRAP=4578→32767Hz)と合わせると GB APU 正規レート 32768Hz との
+// 誤差が 0.117% → 0.004% に縮小し、長時間再生でのテンポずれが解消する。
+#define AUDIO_SAMPLE_RATE 32800
 #define MINIGB_APU_AUDIO_FORMAT_S16SYS
 #include "minigb_apu.h"
 

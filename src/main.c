@@ -52,8 +52,10 @@ static volatile uint8_t g_joypad       = 0xFF;
 static volatile uint8_t g_function_key = 0;
 
 // ── 音声 SPSC リングバッファ ──────────────────────────────────────────────────
-// Core 0 (producer): gb_core_fill_audio 後に push
-// Core 1 (consumer): DMA 補充タイミングで pop → audio_pwm_submit
+// Core 0 (producer): gb_core_fill_audio 後に push（メインループ）
+// Core 0 (consumer): DMA 完了 IRQ で pop（audio_fill_pwm コールバック）
+// producer・consumer ともに Core 0。consumer は IRQ として producer を preempt する。
+// producer は __dmb() + g_afifo_w 更新をループ末尾にまとめるため ordering は安全。
 #define AUDIO_FIFO_CAP 2048  // ステレオペア数（2の累乗）、~62ms @32774Hz
 static int16_t           g_afifo[AUDIO_FIFO_CAP * 2];
 static volatile uint32_t g_afifo_w = 0;  // Core 0 のみ書く
@@ -72,8 +74,9 @@ static void audio_fifo_push(const int16_t *src, int n_pairs) {
     g_afifo_w = w;
 }
 
-// DMA IRQ コールバック（Core 1 ISR コンテキスト）: リングバッファを直接 PWM 形式に変換
-static void audio_fill_pwm(uint32_t *dst, int n) {
+// DMA IRQ コールバック: リングバッファを直接 PWM 形式に変換
+// SRAM 配置必須: Core 0 の IRQ が Flash 書き込み中（XIP 無効）でも実行できるよう
+static void __not_in_flash_func(audio_fill_pwm)(uint32_t *dst, int n) {
     uint32_t r    = g_afifo_r;
     uint32_t head = g_afifo_w;
     for (int i = 0; i < n; i++) {
@@ -137,8 +140,6 @@ static uint8_t key_to_joypad_bit(int c) {
 static void core1_main(void) {
     // Flash 書き込み時に Core 0 からロックアウト要求を受け取れるよう登録
     multicore_lockout_victim_init();
-    // 音声 DMA IRQ を Core 1 に登録してから即座に開始
-    audio_pwm_init();
 
     // KB コントローラ起動待ち（この間 DMA は silence を再生）
     sleep_ms(2000);
@@ -282,10 +283,11 @@ int main()
     // LCD SPI バス排他ミューテックスを Core 1 起動前に初期化
     mutex_init(&g_lcd_mutex);
 
-    // DMA IRQ 音声補充コールバックを Core 1 起動前に登録
+    // 音声 DMA を Core 0 で初期化（IRQ が Core 0 に登録され lockout 中も継続動作）
     audio_pwm_set_fill_cb(audio_fill_pwm);
+    audio_pwm_init();
 
-    // Core 1: 音声 DMA + LCD + キーボード
+    // Core 1: LCD + キーボード
     multicore_launch_core1(core1_main);
 
     // GB フレームタイマー（59.727fps = 16743μs）
@@ -338,6 +340,7 @@ int main()
                 mutex_exit(&g_lcd_mutex);
 
                 // Flash 書き込み中は Core 1 をロックアウト
+                // DMA IRQ は Core 0 に登録済みなので lockout 中も継続動作する
                 multicore_lockout_start_blocking();
                 save_flash_state_save(g_state_slot);
                 multicore_lockout_end_blocking();
