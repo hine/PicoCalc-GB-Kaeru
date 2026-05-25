@@ -52,7 +52,7 @@ add_executable(picocalc_gb_kaeru
     src/menu/menu.c
     emu/gb/gb_core.c
     lib/peanut-gb/examples/sdl2/minigb_apu/minigb_apu.c
-    hw_config.c
+    src/storage/hw_config.c
 )
 
 target_include_directories(picocalc_gb_kaeru PRIVATE

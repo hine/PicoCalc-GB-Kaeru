@@ -2,16 +2,12 @@
 
 ## 1. 概要
 
-本ドキュメントでは、RP2350A + PicoCalc を用いた Game Boy / Game Boy Color 互換機開発環境の構築方法をまとめる。
-
-対象プロジェクト：
-
-- B-2: RP2350 + PicoCalc を用いた GB/GBC 互換機
+RP2350A + PicoCalc を用いた Game Boy / Game Boy Color 互換機の開発環境セットアップ手順。
 
 開発方針：
 
 - CLIベース開発
-- Codex / Claude Code などAI支援開発を前提
+- Claude Code などAI支援開発を前提
 - Pico SDK + CMake + Ninja を採用
 - VSCode は補助用途
 - compile_commands.json を生成し、AI補完を強化
@@ -20,13 +16,10 @@
 
 - Ubuntu 24.04 LTS
 - WSL2 Ubuntu 24.04
-- Debian系Linux
 
 ---
 
-# 2. 必要パッケージ
-
-まずシステムパッケージを導入する。
+## 2. 必要パッケージ
 
 ```
 sudo apt update
@@ -40,47 +33,16 @@ sudo apt install -y \
   build-essential \
   pkg-config \
   python3 \
-  python3-pip \
-  python3-venv \
-  python3-setuptools \
-  python3-wheel \
   unzip \
-  wget \
-  tar \
-  minicom \
-  picocom
+  wget
 ```
-
-## 2.1 pyenv による Python 環境構築
-
-pyenv を利用する場合、apt の python3-pip / python3-venv / python3-setuptools / python3-wheel は補助的な導入にとどめ、プロジェクト用 virtualenv を以下のように構築する。
-
-```
-pyenv virtualenv 3.13.13 picocalc_gb_kaeru
-pyenv local picocalc_gb_kaeru
-pip install --upgrade pip
-pip install wheel
-pip install setuptools
-```
-
-`pyenv local` によりプロジェクトディレクトリに `.python-version` が生成され、以降そのディレクトリに入ると自動的に `picocalc_gb_kaeru` 環境に切り替わる。
 
 ---
 
-# 3. 作業ディレクトリ作成
+## 3. Pico SDK 導入
 
 ```
 mkdir -p ~/dev
-cd ~/dev
-```
-
----
-
-# 4. Pico SDK導入
-
-RP2350は Raspberry Pi Pico SDK を利用する。
-
-```
 cd ~/dev
 
 git clone https://github.com/raspberrypi/pico-sdk.git
@@ -88,7 +50,7 @@ cd pico-sdk
 git submodule update --init
 ```
 
-環境変数を設定する。
+環境変数を設定する（direnv を使う場合は 3.1 を参照）：
 
 ```
 echo 'export PICO_SDK_PATH=$HOME/dev/pico-sdk' >> ~/.bashrc
@@ -103,27 +65,15 @@ echo $PICO_SDK_PATH
 
 ---
 
-## 4.1 direnv による自動環境変数設定（推奨）
-
-毎回 `PICO_SDK_PATH` を手動で設定する手間を省くため、direnv を使用する。
-ディレクトリに入ると自動的に `.envrc` が読み込まれ、環境変数が設定される。
-
-### インストール
+### 3.1 direnv による自動環境変数設定（推奨）
 
 ```
 sudo apt install -y direnv
-```
-
-### シェルへのフック設定
-
-```
 echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### プロジェクトディレクトリの許可
-
-プロジェクトルートに `.envrc` が既に用意されている。初回のみ以下を実行して許可する：
+プロジェクトルートに `.envrc` が用意されているので、初回のみ許可する：
 
 ```
 cd ~/Projects/PicoCalc-GB-Kaeru
@@ -134,25 +84,19 @@ direnv allow .
 
 ---
 
-# 5. picotool導入
+## 4. picotool 導入
 
-UF2書き込みやデバッグ補助に使用する。
+UF2 書き込み補助に使用する。
 
 ```
 sudo apt install libusb-1.0-0-dev
 
 cd ~/dev
-
 git clone https://github.com/raspberrypi/picotool.git
-
 cd picotool
-
-mkdir build
-cd build
-
+mkdir build && cd build
 cmake ..
 make -j$(nproc)
-
 sudo make install
 ```
 
@@ -164,115 +108,23 @@ picotool version
 
 ---
 
-# 6. プロジェクト作成
-
-作業ディレクトリを作成する。（もしくはgithubからcloneする）
+## 5. リポジトリのクローン
 
 ```
-cd ~/Projects/
-
-mkdir PicoCalc-GB-Kaeru
+cd ~/Projects
+git clone --recurse-submodules <repo-url> PicoCalc-GB-Kaeru
 cd PicoCalc-GB-Kaeru
 ```
 
----
-
-# 7. 初期ディレクトリ構成
+サブモジュールが未取得の場合：
 
 ```
-mkdir -p \
-  src/platform \
-  src/video \
-  src/input \
-  src/audio \
-  src/storage \
-  src/system \
-  emu/gb \
-  roms \
-  saves \
-  tools
+git submodule update --init --recursive
 ```
 
 ---
 
-# 8. .gitignore作成
-
-```
-cat << 'EOF' > .gitignore
-build/
-*.uf2
-*.elf
-*.bin
-*.map
-compile_commands.json
-
-roms/*.gb
-roms/*.gbc
-
-saves/*
-*.sav
-*.state
-EOF
-```
-
----
-
-# 9. CMakeLists.txt 作成
-
-```
-cat << 'EOF' > CMakeLists.txt
-cmake_minimum_required(VERSION 3.13)
-
-include($ENV{PICO_SDK_PATH}/external/pico_sdk_import.cmake)
-
-project(picocalc_gb_kaeru C CXX ASM)
-
-set(CMAKE_C_STANDARD 11)
-set(CMAKE_CXX_STANDARD 17)
-
-pico_sdk_init()
-
-add_executable(picocalc_gb_kaeru
-    src/main.c
-)
-
-target_link_libraries(picocalc_gb_kaeru
-    pico_stdlib
-)
-
-pico_add_extra_outputs(picocalc_gb_kaeru)
-
-pico_enable_stdio_usb(picocalc_gb_kaeru 1)
-pico_enable_stdio_uart(picocalc_gb_kaeru 0)
-
-EOF
-```
-
----
-
-# 10. 最小main.c作成
-
-```
-cat << 'EOF' > src/main.c
-#include <stdio.h>
-#include "pico/stdlib.h"
-
-int main()
-{
-    stdio_init_all();
-
-    while (true)
-    {
-        printf("Hello PicoCalc GB\n");
-        sleep_ms(1000);
-    }
-}
-EOF
-```
-
----
-
-# 11. ビルド
+## 6. ビルド
 
 ```
 cd ~/Projects/PicoCalc-GB-Kaeru
@@ -280,273 +132,124 @@ cd ~/Projects/PicoCalc-GB-Kaeru
 cmake -S . -B build \
   -G Ninja \
   -DPICO_BOARD=pico2 \
+  -DPICO_PLATFORM=rp2350 \
   -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
-cmake --build build
+cmake --build build -j$(nproc)
 ```
 
 生成物：
 
 ```
-build/picocalc_gb.uf2
+build/picocalc_gb_kaeru.uf2
 ```
 
 ---
 
-# 12. PicoCalcへの書き込み
+## 7. PicoCalc への書き込み
 
-## 12.1 BOOTSELモード
-
-RP2350ボードをBOOTSELモードでUSB接続する。
-
-接続後、USBマスストレージとして認識される。
-
----
-
-## 12.2 UF2コピー
+RP2350 ボードを BOOTSEL ボタンを押しながら USB 接続する。USB マスストレージとして認識されたら：
 
 ```
-cp build/picocalc_gb.uf2 /media/$USER/RPI-RP2/
+cp build/picocalc_gb_kaeru.uf2 /media/$USER/RPI-RP2/
 ```
 
 自動的に再起動する。
 
----
-
-# 13. シリアル確認
-
-デバイス確認：
-
-```
-dmesg | tail
-```
-
-シリアル接続：
-
-```
-picocom -b 115200 /dev/ttyACM0
-```
-
-終了：
-
-```
-Ctrl-A
-Ctrl-X
-```
+> **注意:** USB stdio は無効化されているため、USB 経由のシリアル出力はない。
+> デバッグが必要な場合は UART (GP0/GP1) を使う。
 
 ---
 
-# 14. compile_commands.json
+## 8. VSCode / clangd 設定
 
-AI支援開発向けに生成する。
+推奨拡張：
 
-```
-build/compile_commands.json
-```
-
-VSCodeやClaude Codeなどが利用可能。
-
-必要に応じてルートへシンボリックリンク：
-
-```
-ln -s build/compile_commands.json .
-```
-
----
-
-# 15. VSCode推奨拡張
-
-推奨：
-
-- C/C++
-- CMake Tools
+- C/C++ (Microsoft)
 - clangd
-- Cortex-Debug
+- CMake Tools
 
-clangd利用推奨。
+clangd 設定（`.vscode/settings.json` は既に用意済み）：
 
----
-
-# 16. 推奨clangd設定
-
-```
-mkdir -p .vscode
-
-cat << 'EOF' > .vscode/settings.json
+```json
 {
   "clangd.arguments": [
     "--compile-commands-dir=build"
   ]
 }
-EOF
 ```
+
+compile_commands.json をルートへリンク（初回のみ）：
+
+```
+ln -sf build/compile_commands.json .
+```
+
+> clangd が RP2350 のクロスコンパイル環境を完全には認識できないため、IDE 上に
+> 誤検知のエラーが表示されることがある。実際のビルドエラーは cmake --build で確認する。
 
 ---
 
-# 17. Git初期化
-
-githubからcloneしていた場合は不要。
-
+## 9. 開発フロー
 
 ```
-git init
-
-git add .
-
-git commit -m "Initial PicoCalc GB project"
-```
-
----
-
-# 18. 次の作業
-
-次に行う推奨作業：
-
-1. PicoCalc LCD仕様調査
-2. PicoCalc keyboard matrix調査
-3. SDカード動作確認
-4. GBエミュコア選定
-5. Peanut-GB / Walnut-CGB評価
-6. LCD描画テスト
-7. 入力テスト
-8. ROMロード実装
-
----
-
-# 19. 推奨開発フロー
-
-```
-変更
- ↓
-cmake --build build
- ↓
-UF2コピー
- ↓
-PicoCalc動作確認
- ↓
-PROGRESS.md を更新  ← チェックボックスを埋め、決定事項を記録
- ↓
-git commit  ← 動作確認のたびにコミット
- ↓
+コード変更
+  ↓
+cmake --build build -j$(nproc)
+  ↓
+UF2 コピー → PicoCalc 動作確認
+  ↓
+PROGRESS.md を更新（チェックボックス・決定事項ログ）
+  ↓
+git commit（動作確認のたびにコミット）
+  ↓
 git push
 ```
 
-## 19.1 PROGRESS.md の更新ルール
-
-`PROGRESS.md` はプロジェクトの「現在地」を示す唯一の場所。作業再開時に最初に確認するドキュメントでもある。
+### PROGRESS.md の更新ルール
 
 - タスクが完了したら **チェックボックスを埋める**（`[ ]` → `[x]`）
 - 実機確認が取れたら **日付付きで記録する**（例: `実機確認済み 2026-05-22`）
 - 方針・仕様を決めたら **決定事項ログに追記する**
 - コミット前に更新し、コードの変更と一緒にコミットする
 
-## 19.2 コミット粒度の指針
+### コミット粒度の指針
 
-作業が長くなるとコミットを忘れやすいため、以下を意識する。
-
-- **単一Issue単位でコミットする** — 1コミット＝1つの目的（機能追加・バグ修正・ドキュメント更新など）
-- **実機確認が取れたらすぐコミット** — 動いた瞬間がコミットのタイミング
-- **大きくなる前にコミット** — 「あとでまとめてコミット」はしない
-
-### コミットメッセージの例
+- **単一 Issue 単位でコミット** — 1コミット＝1つの目的
+- **実機確認が取れたらすぐコミット**
+- **大きくなる前にコミット**
 
 ```
-# 機能追加
-キーボードドライバ実装・LCD にキー入力を表示するテスト
-
-# ドキュメント
-.envrc 追加・開発環境ドキュメントに direnv セットアップ手順を追記
-
-# 進捗更新
-進捗更新: LCD Hello World 実機確認完了
+# 例
+feat(audio): Core 1 移行・DMA IRQ 駆動
+fix(input): ESC キーでメニューが閉じてしまう問題を修正
+docs: 開発環境ドキュメントを現状に合わせて更新
 ```
 
 ---
 
-# 20. 将来的な構成
+## 10. トラブルシューティング
 
-将来的には以下の構成を目指す。
-
-```
-共通:
-  emu/
-  ui/
-  storage/
-
-PicoCalc依存:
-  platform_picocalc/
-  video_picocalc/
-
-ESP32-S3依存:
-  platform_esp32/
-  video_esp32/
-```
-
-これにより、B-2で構築したGB/GBCコアをA-2へ移植しやすくする。
-
----
-
-# 21. トラブルシューティング
-
-## 21.1 cmakeでPICO_SDK_PATHエラー
-
-確認：
+### PICO_SDK_PATH エラー
 
 ```
 echo $PICO_SDK_PATH
-```
-
-再読込：
-
-```
 source ~/.bashrc
 ```
 
----
-
-## 21.2 gcc-arm-none-eabi が見つからない
-
-確認：
+### gcc-arm-none-eabi が見つからない
 
 ```
 arm-none-eabi-gcc --version
-```
-
-未導入の場合：
-
-```
 sudo apt install gcc-arm-none-eabi
 ```
 
----
+### UF2 が認識されない
 
-## 21.3 UF2が認識されない
+- BOOTSEL 押下を確認
+- USB ケーブルがデータ転送対応であることを確認
+- `dmesg | tail` で USB 認識状況を確認
 
-- BOOTSEL押下確認
-- USBケーブル確認
-- dmesg確認
+### compile_commands.json が生成されない
 
----
-
-## 21.4 compile_commands.json が生成されない
-
-cmake実行時に以下を確認：
-
-```
--DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-```
-
----
-
-# 22. 当面の目標
-
-最初の目標：
-
-- PicoCalc LCD初期化
-- Hello World表示
-- キー入力確認
-- SDカードからROMロード
-- GB ROM起動
-- 「カエルのために鐘は鳴る」タイトル表示
-
-まずは「音なし・最低限UI」でよい。
+cmake 実行時に `-DCMAKE_EXPORT_COMPILE_COMMANDS=ON` が付いているか確認する。
