@@ -26,6 +26,19 @@ void flash_meta_set_rom(const uint8_t *rom_title_11);
 // Core 1 ロックアウト済みであること。
 void flash_meta_clear_rom(void);
 
+// ── ユーザー設定 ──────────────────────────────────────────────────────────────
+// デフォルト: palette_idx=0(DMGGreen), audio_en=1(ON), backlight=128
+// Core 1 未起動または任意のタイミングで呼び出し可（XIP 読み取りのみ）。
+void flash_settings_load(uint8_t *palette_idx, uint8_t *audio_en, uint8_t *backlight);
+
+// 設定を Flash に書き込む。Core 1 ロックアウト済みであること。
+void flash_settings_save(uint8_t palette_idx, uint8_t audio_en, uint8_t backlight);
+
+// メタデータセクタ全消去（ROM/SRAM フラグ・設定をすべてクリア）。
+// 次回起動時に SD からの全データ再ロードを強制する。
+// Core 1 ロックアウト済みであること。
+void flash_meta_clear_all(void);
+
 // ── SRAM セーブメタデータ ──────────────────────────────────────────────────
 // SRAM セーブが有効かつ rom_title_11 が一致するかを返す。
 // 異なる ROM のセーブデータが読み込まれるクロス汚染を防ぐ。

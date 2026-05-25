@@ -9,9 +9,13 @@
 #include "storage/storage_sd.h"
 #include "storage/rom_flash.h"
 #include "storage/save_flash.h"
+#include "storage/save_sram.h"
 #include "storage/flash_meta.h"
 #include "audio/audio_pwm.h"
 #include "gb/gb_core.h"
+#include "menu/menu.h"
+
+#define SRAM_SD_PATH "0:/saves/kaeru.sav"
 
 #define ROM_PATH  "0:/roms/kaeru.gb"
 
@@ -46,10 +50,14 @@ static void go_dormant(void) {
     powman_hw->scratch[0] = 0;
 }
 
-// ── Core 間共有: ジョイパッド / F キー ────────────────────────────────────────
-// Core 1 が書く / Core 0 が読む。uint8_t 書き込みは ARM で atomic なので mutex 不要。
-static volatile uint8_t g_joypad       = 0xFF;
-static volatile uint8_t g_function_key = 0;
+// ── Core 間共有: ジョイパッド / F キー / メニュー入力 ────────────────────────
+// Core 1 が書く / Core 0 が読む。uint8_t / int 書き込みは ARM で atomic なので mutex 不要。
+static volatile uint8_t g_joypad        = 0xFF;
+static volatile uint8_t g_function_key  = 0;
+static volatile int     g_menu_key      = 0;    // Core 1 → Core 0: 生キーコード
+static volatile uint8_t g_backlight_req = 128;  // Core 0 → Core 1: バックライト変更要求値
+static volatile bool    g_backlight_dirty = true; // true のとき Core 1 が kbd_set_backlight を呼ぶ
+static bool             g_audio_enabled = true;  // Core 0 のみ読み書き（音声処理の有効/無効）
 
 // ── 音声 SPSC リングバッファ ──────────────────────────────────────────────────
 // Core 0 (producer): gb_core_fill_audio 後に push（メインループ）
@@ -174,10 +182,19 @@ static void core1_main(void) {
                 else         joy |=  bit;
             }
             if (pressed &&
-                (c == KEY_F1 || c == KEY_F2 || c == KEY_F3 || c == KEY_F4))
+                (c == KEY_F1 || c == KEY_F2 || c == KEY_F3 || c == KEY_F4 ||
+                 c == KEY_ESC))
                 g_function_key = (uint8_t)c;
+            if (pressed)
+                g_menu_key = c;  // Core 0 の menu_tick が消費する
         }
         g_joypad = joy;
+
+        // ── バックライト変更要求の適用 ────────────────────────────────────
+        if (g_backlight_dirty) {
+            g_backlight_dirty = false;
+            kbd_set_backlight(g_backlight_req);
+        }
 
         // ── バッテリー残量: 定期 I2C 読み取り → LCD 更新 ────────────────────
         // 正常時: 30秒ごと / NACK（レジスタ未実装）時: 5分ごとに再試行
@@ -312,6 +329,16 @@ int main()
     // LCD SPI バス排他ミューテックスを Core 1 起動前に初期化
     mutex_init(&g_lcd_mutex);
 
+    // Flash から設定を読み込んで起動時に適用
+    {
+        uint8_t init_palette, init_audio_en, init_backlight;
+        flash_settings_load(&init_palette, &init_audio_en, &init_backlight);
+        g_audio_enabled   = (init_audio_en != 0);
+        g_backlight_req   = init_backlight;
+        g_backlight_dirty = true;  // Core 1 の kbd_wait_ready 完了後に適用
+        lcd_palette_set(init_palette);
+    }
+
     // 音声 DMA を Core 0 で初期化（IRQ が Core 0 に登録され lockout 中も継続動作）
     audio_pwm_set_fill_cb(audio_fill_pwm);
     audio_pwm_init();
@@ -332,6 +359,82 @@ int main()
     int g_top_msg_ttl = 0;
 
     while (true) {
+        // ── メニュー処理（ポーズ中） ─────────────────────────────────────────
+        if (menu_is_open()) {
+            int k = g_menu_key;
+            if (k) {
+                g_menu_key = 0;
+                mutex_enter_blocking(&g_lcd_mutex);
+                menu_action_t act = menu_tick(k);
+                mutex_exit(&g_lcd_mutex);
+
+                if (act == MENU_ACT_CLOSE) {
+                    // 設定を Flash に保存してゲームを再開
+                    multicore_lockout_start_blocking();
+                    flash_settings_save(menu_get_palette(),
+                                        menu_get_audio_enabled(),
+                                        menu_get_backlight());
+                    multicore_lockout_end_blocking();
+
+                    g_audio_enabled = (menu_get_audio_enabled() != 0);
+                    uint8_t new_bl  = menu_get_backlight();
+                    if (new_bl != g_backlight_req) {
+                        g_backlight_req   = new_bl;
+                        g_backlight_dirty = true;
+                    }
+                    mutex_enter_blocking(&g_lcd_mutex);
+                    lcd_gb_frame_redraw(g_fb[g_lcd_fb_idx]);
+                    mutex_exit(&g_lcd_mutex);
+                    add_repeating_timer_us(-16743, frame_timer_cb, NULL, &frame_timer);
+
+                } else if (act == MENU_ACT_SRAM_TO_SD) {
+                    if (sd_mounted && gb_core_save_size() > 0) {
+                        mutex_enter_blocking(&g_lcd_mutex);
+                        lcd_status_storage_icon(STORAGE_ICON_SD);
+                        mutex_exit(&g_lcd_mutex);
+                        save_sram_save(SRAM_SD_PATH,
+                                       gb_core_cart_ram_ptr(), gb_core_save_size());
+                        mutex_enter_blocking(&g_lcd_mutex);
+                        lcd_status_storage_icon(STORAGE_ICON_OFF);
+                        mutex_exit(&g_lcd_mutex);
+                    }
+
+                } else if (act == MENU_ACT_SD_TO_FLASH) {
+                    if (sd_mounted && gb_core_save_size() > 0) {
+                        mutex_enter_blocking(&g_lcd_mutex);
+                        lcd_status_storage_icon(STORAGE_ICON_READ);
+                        mutex_exit(&g_lcd_mutex);
+                        int r = save_sram_load(SRAM_SD_PATH,
+                                               gb_core_cart_ram_ptr(), gb_core_save_size());
+                        if (r == 0) {
+                            mutex_enter_blocking(&g_lcd_mutex);
+                            lcd_status_storage_icon(STORAGE_ICON_FLASH);
+                            mutex_exit(&g_lcd_mutex);
+                            multicore_lockout_start_blocking();
+                            save_flash_sram_save(gb_core_cart_ram_ptr(), gb_core_save_size());
+                            multicore_lockout_end_blocking();
+                        }
+                        mutex_enter_blocking(&g_lcd_mutex);
+                        lcd_status_storage_icon(STORAGE_ICON_OFF);
+                        mutex_exit(&g_lcd_mutex);
+                    }
+
+                } else if (act == MENU_ACT_FLASH_CLEAR_EXEC) {
+                    mutex_enter_blocking(&g_lcd_mutex);
+                    lcd_status_storage_icon(STORAGE_ICON_FLASH);
+                    mutex_exit(&g_lcd_mutex);
+                    multicore_lockout_start_blocking();
+                    flash_meta_clear_all();
+                    multicore_lockout_end_blocking();
+                    mutex_enter_blocking(&g_lcd_mutex);
+                    lcd_status_storage_icon(STORAGE_ICON_OFF);
+                    mutex_exit(&g_lcd_mutex);
+                }
+            }
+            tight_loop_contents();
+            continue;
+        }
+
         while (!g_frame_tick) tight_loop_contents();
         g_frame_tick = false;
 
@@ -392,6 +495,16 @@ int main()
                 g_top_msg_ttl = 120;
                 g_top_text_pending = false;
 
+            } else if (fkey == KEY_ESC) {
+                // メニューを開く（frame_timer を停止してゲームをポーズ）
+                cancel_repeating_timer(&frame_timer);
+                mutex_enter_blocking(&g_lcd_mutex);
+                menu_open(g_fb[g_lcd_fb_idx],
+                          (uint8_t)lcd_palette_get(),
+                          g_audio_enabled ? 1 : 0,
+                          g_backlight_req);
+                mutex_exit(&g_lcd_mutex);
+
             } else if (fkey == KEY_F4) {
                 // ロード: Flash の XIP 読み取りのみ → ロックアウト不要
                 mutex_enter_blocking(&g_lcd_mutex);
@@ -424,8 +537,10 @@ int main()
         gb_core_set_joypad(g_joypad);
         gb_core_run_frame();  // g_fb[g_fb_write] に描画
 
-        gb_core_fill_audio(audio_buf);
-        audio_fifo_push(audio_buf, GB_AUDIO_SAMPLES);
+        if (g_audio_enabled) {
+            gb_core_fill_audio(audio_buf);
+            audio_fifo_push(audio_buf, GB_AUDIO_SAMPLES);
+        }
 
         // Core 1 が前フレームの描画を終えていれば新フレームを渡す。
         // まだ描画中なら今フレームの LCD 更新をスキップ（フレームドロップ）。

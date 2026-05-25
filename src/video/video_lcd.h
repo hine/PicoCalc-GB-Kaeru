@@ -2,6 +2,7 @@
 #define VIDEO_LCD_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,6 +44,24 @@ void lcd_status_top_text(const char *msg);
 
 // 上部 16px ストリップ右側にバッテリー残量を表示する。pct: 0-100 = 残量%、-1 = 不明
 void lcd_status_battery(int pct);
+
+// ── パレット ─────────────────────────────────────────────────────────────────
+int         lcd_palette_count(void);
+int         lcd_palette_get(void);
+const char *lcd_palette_name(int idx);
+// パレットを切り替える。dmg_pal565 を更新し prev_fb を無効化する。
+void        lcd_palette_set(int idx);
+
+// 現在のパレットでフレームバッファを強制全画面再描画する（メニュープレビュー用）。
+void lcd_gb_frame_redraw(const uint8_t fb[144][160]);
+
+// ── メニューオーバーレイ ─────────────────────────────────────────────────────
+// items: ラベル文字列の配列（ASCII）、n: 項目数、cursor: ハイライト行
+void lcd_menu_draw(const char *const items[], int n, int cursor);
+// 単一項目を再描画する（カーソル移動・値変更時の部分更新用）
+void lcd_menu_item_redraw(const char *label, int idx, bool selected);
+// フラッシュクリア確認ダイアログをメニューの上に描画する
+void lcd_menu_draw_confirm(void);
 
 #ifdef __cplusplus
 }

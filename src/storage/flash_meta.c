@@ -5,6 +5,7 @@
 
 #define META_MAGIC_ROM   0x524F4D4Bu  // 'ROMK'
 #define META_MAGIC_SRAM  0x53524D4Bu  // 'SRMK'
+#define META_MAGIC_SET   0x53455454u  // 'SETT'
 #define ROM_TITLE_LEN    11
 
 typedef struct {
@@ -16,18 +17,33 @@ typedef struct {
     uint8_t  _pad1[1];
 } meta_t;  // 32 bytes
 
+typedef struct {
+    uint32_t magic;        // META_MAGIC_SET if valid
+    uint8_t  palette_idx;
+    uint8_t  audio_en;
+    uint8_t  backlight;
+    uint8_t  _pad;
+} settings_t;  // 8 bytes
+
+#define SETTINGS_OFFSET  sizeof(meta_t)  // meta_t 直後
+
 static const meta_t *meta_xip(void) {
     return (const meta_t *)(XIP_BASE + FLASH_META_OFFSET);
 }
 
-static void meta_write(const meta_t *m) {
+// セクタ内の一部分だけ上書きして書き戻す（残りの内容を保持する）
+static void sector_rw(size_t offset, const void *data, size_t len) {
     static uint8_t buf[FLASH_SECTOR_SIZE];
-    memset(buf, 0xFF, FLASH_SECTOR_SIZE);
-    memcpy(buf, m, sizeof(meta_t));
+    memcpy(buf, (const uint8_t *)(XIP_BASE + FLASH_META_OFFSET), FLASH_SECTOR_SIZE);
+    memcpy(buf + offset, data, len);
     uint32_t ints = save_and_disable_interrupts();
     flash_range_erase(FLASH_META_OFFSET, FLASH_SECTOR_SIZE);
     flash_range_program(FLASH_META_OFFSET, buf, FLASH_SECTOR_SIZE);
     restore_interrupts(ints);
+}
+
+static void meta_write(const meta_t *m) {
+    sector_rw(0, m, sizeof(meta_t));
 }
 
 bool flash_meta_rom_valid(void) {
@@ -73,4 +89,36 @@ void flash_meta_clear_sram(void) {
     m.sram_magic = 0xFFFFFFFFu;
     memset(m.sram_rom_title, 0xFF, ROM_TITLE_LEN);
     meta_write(&m);
+}
+
+// ── ユーザー設定 ──────────────────────────────────────────────────────────────
+
+void flash_settings_load(uint8_t *palette_idx, uint8_t *audio_en, uint8_t *backlight) {
+    const settings_t *s = (const settings_t *)(
+        XIP_BASE + FLASH_META_OFFSET + SETTINGS_OFFSET);
+    if (s->magic == META_MAGIC_SET) {
+        *palette_idx = s->palette_idx;
+        *audio_en    = s->audio_en;
+        *backlight   = s->backlight;
+    } else {
+        *palette_idx = 0;
+        *audio_en    = 1;
+        *backlight   = 128;
+    }
+}
+
+void flash_settings_save(uint8_t palette_idx, uint8_t audio_en, uint8_t backlight) {
+    settings_t s;
+    s.magic       = META_MAGIC_SET;
+    s.palette_idx = palette_idx;
+    s.audio_en    = audio_en;
+    s.backlight   = backlight;
+    s._pad        = 0;
+    sector_rw(SETTINGS_OFFSET, &s, sizeof(settings_t));
+}
+
+void flash_meta_clear_all(void) {
+    uint32_t ints = save_and_disable_interrupts();
+    flash_range_erase(FLASH_META_OFFSET, FLASH_SECTOR_SIZE);
+    restore_interrupts(ints);
 }

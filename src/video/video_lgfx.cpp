@@ -4,13 +4,24 @@
 
 static LGFX_PicoCalc lcd;
 
-// DMG クラシックグリーンパレット (R, G, B 各 8bit)
-static const uint8_t dmg_palette[4][3] = {
-    {0x9B, 0xBC, 0x0F},
-    {0x8B, 0xAC, 0x0F},
-    {0x30, 0x62, 0x30},
-    {0x0F, 0x38, 0x0F},
+// パレット定義: [palette_idx][shade_0..3][R,G,B]
+static const uint8_t g_palettes[4][4][3] = {
+    { // 0: DMGグリーン（クラシックゲームボーイ）
+        {0x9B,0xBC,0x0F},{0x8B,0xAC,0x0F},{0x30,0x62,0x30},{0x0F,0x38,0x0F},
+    },
+    { // 1: モノクロ
+        {0xFF,0xFF,0xFF},{0xAA,0xAA,0xAA},{0x55,0x55,0x55},{0x00,0x00,0x00},
+    },
+    { // 2: セピア
+        {0xF5,0xE6,0xC8},{0xC4,0x96,0x6A},{0x7A,0x55,0x32},{0x2A,0x15,0x00},
+    },
+    { // 3: GBポケット（ニュートラルグレー）
+        {0xC8,0xC8,0xC8},{0x8C,0x8C,0x8C},{0x50,0x50,0x50},{0x14,0x14,0x14},
+    },
 };
+static const char *g_palette_names[4] = {"DMGGreen", "Mono", "Sepia", "GBPocket"};
+#define N_PALETTES 4
+static int g_palette_idx = 0;
 
 // LCD 上での GB 画面オフセット: (320 - 144×2) / 2 = 16
 #define GB_Y_OFF  16
@@ -23,6 +34,14 @@ static uint16_t row_buf[320];
 
 // RGB565 パレット (lgfx::color565 で生成、writePixels swap=true で正しく転送)
 static uint16_t dmg_pal565[4];
+
+static void apply_palette(int idx) {
+    for (int i = 0; i < 4; i++)
+        dmg_pal565[i] = lgfx::color565(
+            g_palettes[idx][i][0],
+            g_palettes[idx][i][1],
+            g_palettes[idx][i][2]);
+}
 
 // ─── ステータスバー定数 ───────────────────────────────────────────────────────
 // 上部: y=0..15 (16px), 下部: y=304..319 (16px)
@@ -38,9 +57,7 @@ void lcd_init(void) {
     lcd.init();
     lcd.setRotation(6);  // MADCTL: MX=0,MY=0 → ミラーなし正常ポートレート
 
-    for (int i = 0; i < 4; i++) {
-        dmg_pal565[i] = lgfx::color565(dmg_palette[i][0], dmg_palette[i][1], dmg_palette[i][2]);
-    }
+    apply_palette(0);
 
     // 初回は全画面再描画を強制
     memset(prev_fb, 0xFF, sizeof(prev_fb));
@@ -107,6 +124,29 @@ void lcd_gb_frame_invalidate(void) {
     memset(prev_fb, 0xFF, sizeof(prev_fb));
 }
 
+// 現在のパレットで全画面強制再描画（メニューのパレットプレビュー用）
+void lcd_gb_frame_redraw(const uint8_t fb[144][160]) {
+    lcd_gb_frame_invalidate();
+    lcd_gb_frame_delta(fb);
+}
+
+// ── パレット ─────────────────────────────────────────────────────────────────
+
+int lcd_palette_count(void) { return N_PALETTES; }
+int lcd_palette_get(void)   { return g_palette_idx; }
+
+const char *lcd_palette_name(int idx) {
+    if (idx < 0 || idx >= N_PALETTES) return "?";
+    return g_palette_names[idx];
+}
+
+void lcd_palette_set(int idx) {
+    if (idx < 0 || idx >= N_PALETTES) return;
+    g_palette_idx = idx;
+    apply_palette(idx);
+    lcd_gb_frame_invalidate();
+}
+
 // ─── ステータスバー ─────────────────────────────────────────────────────────
 
 void lcd_status_draw_hints(void) {
@@ -140,6 +180,86 @@ void lcd_status_top_text(const char *msg) {
     lcd.setTextColor(TFT_WHITE, TFT_BLACK);
     lcd.setCursor(0, 4);  // 8px フォントを 16px ストリップ内で縦中央に
     lcd.print(msg);
+    lcd.endWrite();
+}
+
+// ── メニューオーバーレイ ─────────────────────────────────────────────────────
+// パネル: x=30,y=65,w=260,h=185
+// タイトル(y=73) / セパレータ(y=89) / 項目(y=93+18*n) / フッタセパレータ(y=236) / フッタ(y=241)
+
+#define MENU_X       30
+#define MENU_Y       65
+#define MENU_W      260
+#define MENU_H      185
+#define MENU_ITEM_Y0  93
+#define MENU_ITEM_H   18
+#define MENU_TEXT_X  (MENU_X + 10)
+#define MENU_BG_C    20, 20, 20
+#define MENU_SEL_C   60, 60, 60
+#define MENU_DIM_C  160,160,160
+
+static void menu_draw_item_inner(const char *label, int idx, bool selected) {
+    int y    = MENU_ITEM_Y0 + idx * MENU_ITEM_H;
+    uint32_t bg = selected ? lcd.color888(MENU_SEL_C) : lcd.color888(MENU_BG_C);
+    uint32_t fg = selected ? (uint32_t)TFT_WHITE      : lcd.color888(MENU_DIM_C);
+    lcd.fillRect(MENU_X + 2, y, MENU_W - 4, MENU_ITEM_H - 1, bg);
+    lcd.setTextColor(fg, bg);
+    lcd.setCursor(MENU_TEXT_X, y + 4);
+    lcd.print(label);
+}
+
+void lcd_menu_draw(const char *const items[], int n, int cursor) {
+    lcd.startWrite();
+    lcd.setFont(&lgfx::fonts::Font0);
+    lcd.setTextSize(1);
+
+    lcd.fillRoundRect(MENU_X, MENU_Y, MENU_W, MENU_H, 4, lcd.color888(MENU_BG_C));
+    lcd.drawRoundRect(MENU_X, MENU_Y, MENU_W, MENU_H, 4, TFT_WHITE);
+
+    lcd.setTextColor(TFT_WHITE, lcd.color888(MENU_BG_C));
+    lcd.setCursor(MENU_TEXT_X, MENU_Y + 8);
+    lcd.print("MENU");
+    lcd.drawFastHLine(MENU_X + 2, MENU_Y + 22, MENU_W - 4, lcd.color888(80, 80, 80));
+
+    for (int i = 0; i < n; i++)
+        menu_draw_item_inner(items[i], i, i == cursor);
+
+    int fy = MENU_Y + MENU_H - 22;
+    lcd.drawFastHLine(MENU_X + 2, fy, MENU_W - 4, lcd.color888(80, 80, 80));
+    lcd.setTextColor(lcd.color888(MENU_DIM_C), lcd.color888(MENU_BG_C));
+    lcd.setCursor(MENU_TEXT_X, fy + 6);
+    lcd.print("A/Ent:OK  B/ESC:Close");
+
+    lcd.endWrite();
+}
+
+void lcd_menu_item_redraw(const char *label, int idx, bool selected) {
+    lcd.startWrite();
+    lcd.setFont(&lgfx::fonts::Font0);
+    lcd.setTextSize(1);
+    menu_draw_item_inner(label, idx, selected);
+    lcd.endWrite();
+}
+
+void lcd_menu_draw_confirm(void) {
+    int x = 60, y = 110, w = 200, h = 100;
+    lcd.startWrite();
+    lcd.fillRoundRect(x, y, w, h, 4, lcd.color888(60, 0, 0));
+    lcd.drawRoundRect(x, y, w, h, 4, TFT_RED);
+    lcd.setFont(&lgfx::fonts::Font0);
+    lcd.setTextSize(1);
+    lcd.setTextColor(TFT_WHITE, lcd.color888(60, 0, 0));
+    lcd.setCursor(x + 8, y + 10);
+    lcd.print("Clear all Flash?");
+    lcd.setCursor(x + 8, y + 22);
+    lcd.print("ROM/SRAM/Settings");
+    lcd.setCursor(x + 8, y + 34);
+    lcd.print("will be erased.");
+    lcd.drawFastHLine(x + 2, y + 50, w - 4, lcd.color888(120, 0, 0));
+    lcd.setCursor(x + 8, y + 58);
+    lcd.print("A/Ent:Execute");
+    lcd.setCursor(x + 8, y + 70);
+    lcd.print("B/ESC:Cancel");
     lcd.endWrite();
 }
 

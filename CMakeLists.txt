@@ -49,6 +49,7 @@ add_executable(picocalc_gb_kaeru
     src/storage/save_sram.c
     src/storage/save_state.c
     src/audio/audio_pwm.c
+    src/menu/menu.c
     emu/gb/gb_core.c
     lib/peanut-gb/examples/sdl2/minigb_apu/minigb_apu.c
     hw_config.c
