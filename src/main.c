@@ -184,6 +184,19 @@ static void core1_main(void) {
         if ((int32_t)(now_ms - bat_next_ms) >= 0) {
             bat_next_ms = now_ms + 30000;
             int raw = kbd_read_battery();  // ~18ms ブロック（sleep_ms(16) を含む）
+
+            // デバッグ: 生の値をトップバーに表示（診断後に削除する）
+            {
+                char dbg[9];
+                if (raw < 0)
+                    snprintf(dbg, sizeof(dbg), "Bt:err  ");
+                else
+                    snprintf(dbg, sizeof(dbg), "Bt:%-5d", raw);
+                mutex_enter_blocking(&g_lcd_mutex);
+                lcd_status_top_text(dbg);
+                mutex_exit(&g_lcd_mutex);
+            }
+
             int pct = -1;
             if (raw > 0) {
                 if (raw <= 100) {

@@ -120,7 +120,7 @@ int kbd_read_battery(void) {
     ret = i2c_read_timeout_us(I2C_KBD_MOD, I2C_KBD_ADDR, (uint8_t *)&buff, 2, false, 500000);
     if (ret < 0) return -1;
 
-    return buff ? (int)buff : -1;
+    return (int)buff;  // 0 = レジスタ未実装、-1 は I2C エラーのみ
 }
 
 int kbd_set_backlight(uint8_t val) {
