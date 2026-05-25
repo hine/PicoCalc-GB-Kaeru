@@ -2,7 +2,9 @@
 
 Game Boy emulator for [ClockworkPi PicoCalc](https://www.clockworkpi.com/picocalc), running on the RP2350A.
 
-The name comes from the first game tested: *For the Frog the Bell Tolls* (カエルのために鐘は鳴る).
+The name comes from the game it was built for: *For the Frog the Bell Tolls* (カエルのために鐘は鳴る).
+
+> **Note:** This emulator was built solely to play *For the Frog the Bell Tolls*. No other games have been tested, and there is no intention to test them.
 
 ---
 
@@ -133,7 +135,9 @@ Each library retains its own license. See the respective `LICENSE` files under `
 
 [ClockworkPi PicoCalc](https://www.clockworkpi.com/picocalc)（RP2350A搭載）で動作する Game Boy エミュレータです。
 
-プロジェクト名は、動作確認に使用した「カエルのために鐘は鳴る」に由来します。
+プロジェクト名は、このエミュレータを作った目的のゲーム「カエルのために鐘は鳴る」に由来します。
+
+> **注意:** このエミュレータは「カエルのために鐘は鳴る」をプレイするためだけに作りました。それ以外のゲームの動作確認はしていませんし、する予定もありません。
 
 ---
 
