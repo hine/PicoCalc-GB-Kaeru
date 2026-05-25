@@ -146,6 +146,7 @@ static void core1_main(void) {
     kbd_wait_ready();
 
     uint8_t joy = 0xFF;
+    uint32_t bat_next_ms = 0;  // 初回はループ開始直後に読み取る
 
     while (true) {
         // ── LCD: Core 0 からフレームが届いていれば描画 ────────────────────────
@@ -177,6 +178,27 @@ static void core1_main(void) {
                 g_function_key = (uint8_t)c;
         }
         g_joypad = joy;
+
+        // ── バッテリー残量: 30秒ごとに I2C 読み取り → LCD 更新 ──────────────
+        uint32_t now_ms = to_ms_since_boot(get_absolute_time());
+        if ((int32_t)(now_ms - bat_next_ms) >= 0) {
+            bat_next_ms = now_ms + 30000;
+            int raw = kbd_read_battery();  // ~18ms ブロック（sleep_ms(16) を含む）
+            int pct = -1;
+            if (raw > 0) {
+                if (raw <= 100) {
+                    pct = raw;              // 既にパーセント値
+                } else {
+                    // 電圧(mV)→% 変換: 3400mV=0%, 4200mV=100%
+                    pct = (raw - 3400) * 100 / 800;
+                    if (pct < 0)   pct = 0;
+                    if (pct > 100) pct = 100;
+                }
+            }
+            mutex_enter_blocking(&g_lcd_mutex);
+            lcd_status_battery(pct);
+            mutex_exit(&g_lcd_mutex);
+        }
     }
 }
 

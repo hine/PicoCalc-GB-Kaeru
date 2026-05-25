@@ -41,6 +41,9 @@ void lcd_status_storage_icon(storage_icon_t state);
 // 上部 16px ストリップ左側に最大 8 文字のメッセージを表示する。
 void lcd_status_top_text(const char *msg);
 
+// 上部 16px ストリップ右側にバッテリー残量を表示する。pct: 0-100 = 残量%、-1 = 不明
+void lcd_status_battery(int pct);
+
 #ifdef __cplusplus
 }
 #endif

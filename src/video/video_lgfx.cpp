@@ -142,3 +142,33 @@ void lcd_status_top_text(const char *msg) {
     lcd.print(msg);
     lcd.endWrite();
 }
+
+// 上部 16px ストリップ右側（ストレージアイコン左隣）にバッテリー残量を表示する。
+// pct: 0-100 = 残量%、-1 = 不明
+void lcd_status_battery(int pct) {
+    static int prev_pct = -2;
+    if (pct == prev_pct) return;
+    prev_pct = pct;
+
+    char buf[5];
+    uint32_t fg;
+    if (pct < 0) {
+        strcpy(buf, " -- ");
+        fg = lcd.color888(128, 128, 128);
+    } else {
+        snprintf(buf, sizeof(buf), "%3d%%", pct);
+        if (pct > 50)      fg = lcd.color888(0, 220, 64);
+        else if (pct > 20) fg = lcd.color888(255, 200, 0);
+        else               fg = lcd.color888(255, 64, 64);
+    }
+
+    // 4文字 × 6px = 24px、ストレージアイコン(x=310)の4px手前
+    lcd.startWrite();
+    lcd.setFont(&lgfx::fonts::Font0);
+    lcd.setTextSize(1);
+    lcd.fillRect(282, 0, 24, 16, TFT_BLACK);
+    lcd.setTextColor(fg, TFT_BLACK);
+    lcd.setCursor(282, 4);
+    lcd.print(buf);
+    lcd.endWrite();
+}
