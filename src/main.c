@@ -179,22 +179,16 @@ static void core1_main(void) {
         }
         g_joypad = joy;
 
-        // ── バッテリー残量: 30秒ごとに I2C 読み取り → LCD 更新 ──────────────
+        // ── バッテリー残量: 定期 I2C 読み取り → LCD 更新 ────────────────────
+        // 正常時: 30秒ごと / NACK（レジスタ未実装）時: 5分ごとに再試行
         uint32_t now_ms = to_ms_since_boot(get_absolute_time());
         if ((int32_t)(now_ms - bat_next_ms) >= 0) {
-            bat_next_ms = now_ms + 30000;
             int raw = kbd_read_battery();  // ~18ms ブロック（sleep_ms(16) を含む）
 
-            // デバッグ: 生の値をトップバーに表示（診断後に削除する）
-            {
-                char dbg[9];
-                if (raw < 0)
-                    snprintf(dbg, sizeof(dbg), "Bt:err  ");
-                else
-                    snprintf(dbg, sizeof(dbg), "Bt:%-5d", raw);
-                mutex_enter_blocking(&g_lcd_mutex);
-                lcd_status_top_text(dbg);
-                mutex_exit(&g_lcd_mutex);
+            if (raw < 0) {
+                bat_next_ms = now_ms + 300000;  // NACK: 5分後に再試行
+            } else {
+                bat_next_ms = now_ms + 30000;   // 正常: 30秒後に再読み取り
             }
 
             int pct = -1;

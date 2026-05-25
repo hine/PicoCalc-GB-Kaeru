@@ -113,14 +113,23 @@ int kbd_read_battery(void) {
     uint8_t msg = 0x0B;
 
     int ret = i2c_write_timeout_us(I2C_KBD_MOD, I2C_KBD_ADDR, &msg, 1, false, 500000);
-    if (ret < 0) return -1;
+    if (ret < 0) {
+        // NACK: レジスタ 0x0B がファームウェア未実装。
+        // バスをリセットして次のキーボード読み取りへの影響を防ぐ。
+        i2c_init(I2C_KBD_MOD, I2C_KBD_SPEED);
+        gpio_set_function(I2C_KBD_SCL, GPIO_FUNC_I2C);
+        gpio_set_function(I2C_KBD_SDA, GPIO_FUNC_I2C);
+        gpio_pull_up(I2C_KBD_SCL);
+        gpio_pull_up(I2C_KBD_SDA);
+        return -1;
+    }
 
     sleep_ms(16);
 
     ret = i2c_read_timeout_us(I2C_KBD_MOD, I2C_KBD_ADDR, (uint8_t *)&buff, 2, false, 500000);
     if (ret < 0) return -1;
 
-    return (int)buff;  // 0 = レジスタ未実装、-1 は I2C エラーのみ
+    return (int)buff;  // 0 = データなし、正値 = 有効値、-1 = I2C エラー
 }
 
 int kbd_set_backlight(uint8_t val) {
