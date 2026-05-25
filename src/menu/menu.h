@@ -24,6 +24,10 @@ bool menu_is_open(void);
 // Flash/SD 操作が必要な場合は MENU_ACT_* を返す（実行は呼び出し元の責務）。
 menu_action_t menu_tick(int key);
 
+// 操作結果トーストをメニュー上に表示する。LCD mutex 取得済みで呼ぶこと。
+// 任意のキー入力で閉じてメニューに戻る。
+void menu_show_toast(const char *msg);
+
 // メニュー終了後に main.c が参照する設定値
 uint8_t menu_get_palette(void);
 uint8_t menu_get_audio_enabled(void);

@@ -4,11 +4,14 @@
 #include <stdio.h>
 #include <string.h>
 
-#define N_ITEMS 6
+#define N_ITEMS 5
 
-static bool    s_open    = false;
-static int     s_cursor  = 0;
-static bool    s_confirm = false;
+static bool    s_open               = false;
+static int     s_cursor             = 0;
+static bool    s_confirm            = false;
+static bool    s_confirm_sd_restore = false;  // true=SD復元確認、false=フラッシュクリア確認
+static bool    s_toast              = false;
+static char    s_toast_msg[48];
 
 static uint8_t s_palette;
 static uint8_t s_audio_en;
@@ -17,19 +20,15 @@ static uint8_t s_backlight;
 // パレットプレビュー用: menu_open 時のフレームバッファ参照（Core 0 はポーズ中に変更しない）
 static const uint8_t (*s_fb)[160];
 
-static const uint8_t BL_PRESETS[] = {64, 128, 192, 255};
-#define N_BL_PRESETS 4
-
 static char s_labels[N_ITEMS][40];
 static const char *s_label_ptrs[N_ITEMS];
 
 static void build_labels(void) {
     snprintf(s_labels[0], sizeof(s_labels[0]), "Palette : %s", lcd_palette_name(s_palette));
     snprintf(s_labels[1], sizeof(s_labels[1]), "Audio   : %s", s_audio_en ? "ON" : "OFF");
-    snprintf(s_labels[2], sizeof(s_labels[2]), "Backlight: %d", s_backlight);
-    snprintf(s_labels[3], sizeof(s_labels[3]), "Backup to SD");
-    snprintf(s_labels[4], sizeof(s_labels[4]), "Restore from SD");
-    snprintf(s_labels[5], sizeof(s_labels[5]), "Clear Flash");
+    snprintf(s_labels[2], sizeof(s_labels[2]), "Backup to SD");
+    snprintf(s_labels[3], sizeof(s_labels[3]), "Restore from SD");
+    snprintf(s_labels[4], sizeof(s_labels[4]), "Clear Flash");
     for (int i = 0; i < N_ITEMS; i++) s_label_ptrs[i] = s_labels[i];
 }
 
@@ -55,11 +54,17 @@ uint8_t menu_get_backlight(void)     { return s_backlight;  }
 static menu_action_t handle_confirm(int key) {
     if (key == ',' || key == '[' || key == KEY_ENTER) {
         s_confirm = false;
-        s_open    = false;
-        return MENU_ACT_FLASH_CLEAR_EXEC;
+        if (s_confirm_sd_restore) {
+            s_confirm_sd_restore = false;
+            return MENU_ACT_SD_TO_FLASH;
+        } else {
+            s_open = false;
+            return MENU_ACT_FLASH_CLEAR_EXEC;
+        }
     }
     if (key == '.' || key == ']') {
-        s_confirm = false;
+        s_confirm            = false;
+        s_confirm_sd_restore = false;
         lcd_menu_draw(s_label_ptrs, N_ITEMS, s_cursor);
     }
     return MENU_ACT_NONE;
@@ -82,21 +87,14 @@ static menu_action_t handle_select(int idx) {
             lcd_menu_item_redraw(s_labels[1], 1, true);
             return MENU_ACT_NONE;
         }
-        case 2: {
-            int pi = 0;
-            for (int i = 0; i < N_BL_PRESETS; i++)
-                if (BL_PRESETS[i] == s_backlight) { pi = i; break; }
-            pi = (pi + 1) % N_BL_PRESETS;
-            s_backlight = BL_PRESETS[pi];
-            build_labels();
-            lcd_menu_item_redraw(s_labels[2], 2, true);
-            return MENU_ACT_NONE;
-        }
-        case 3:
+        case 2:
             return MENU_ACT_SRAM_TO_SD;
+        case 3:
+            s_confirm            = true;
+            s_confirm_sd_restore = true;
+            lcd_menu_draw_sd_confirm();
+            return MENU_ACT_NONE;
         case 4:
-            return MENU_ACT_SD_TO_FLASH;
-        case 5:
             s_confirm = true;
             lcd_menu_draw_confirm();
             return MENU_ACT_NONE;
@@ -104,8 +102,23 @@ static menu_action_t handle_select(int idx) {
     return MENU_ACT_NONE;
 }
 
+void menu_show_toast(const char *msg) {
+    strncpy(s_toast_msg, msg, sizeof(s_toast_msg) - 1);
+    s_toast_msg[sizeof(s_toast_msg) - 1] = '\0';
+    s_toast = true;
+    lcd_menu_draw_toast(s_toast_msg);
+}
+
 menu_action_t menu_tick(int key) {
     if (!s_open) return MENU_ACT_NONE;
+
+    if (s_toast) {
+        if (key != 0) {
+            s_toast = false;
+            lcd_menu_draw(s_label_ptrs, N_ITEMS, s_cursor);
+        }
+        return MENU_ACT_NONE;
+    }
 
     if (s_confirm) return handle_confirm(key);
 

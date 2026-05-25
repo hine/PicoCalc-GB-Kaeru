@@ -263,6 +263,44 @@ void lcd_menu_draw_confirm(void) {
     lcd.endWrite();
 }
 
+void lcd_menu_draw_sd_confirm(void) {
+    int x = 55, y = 105, w = 210, h = 110;
+    lcd.startWrite();
+    lcd.fillRoundRect(x, y, w, h, 4, lcd.color888(40, 30, 0));
+    lcd.drawRoundRect(x, y, w, h, 4, lcd.color888(255, 160, 0));
+    lcd.setFont(&lgfx::fonts::Font0);
+    lcd.setTextSize(1);
+    lcd.setTextColor(TFT_WHITE, lcd.color888(40, 30, 0));
+    lcd.setCursor(x + 8, y + 10);
+    lcd.print("Restore from SD?");
+    lcd.setCursor(x + 8, y + 22);
+    lcd.print("Flash save will be");
+    lcd.setCursor(x + 8, y + 34);
+    lcd.print("overwritten.");
+    lcd.drawFastHLine(x + 2, y + 50, w - 4, lcd.color888(120, 80, 0));
+    lcd.setCursor(x + 8, y + 58);
+    lcd.print("A/Ent:Execute");
+    lcd.setCursor(x + 8, y + 70);
+    lcd.print("B/ESC:Cancel");
+    lcd.endWrite();
+}
+
+void lcd_menu_draw_toast(const char *msg) {
+    int x = 55, y = 130, w = 210, h = 60;
+    lcd.startWrite();
+    lcd.fillRoundRect(x, y, w, h, 4, lcd.color888(0, 40, 20));
+    lcd.drawRoundRect(x, y, w, h, 4, lcd.color888(0, 200, 80));
+    lcd.setFont(&lgfx::fonts::Font0);
+    lcd.setTextSize(1);
+    lcd.setTextColor(TFT_WHITE, lcd.color888(0, 40, 20));
+    lcd.setCursor(x + 8, y + 12);
+    lcd.print(msg);
+    lcd.setTextColor(lcd.color888(MENU_DIM_C), lcd.color888(0, 40, 20));
+    lcd.setCursor(x + 8, y + 38);
+    lcd.print("Any key: OK");
+    lcd.endWrite();
+}
+
 // 上部 16px ストリップ右側（ストレージアイコン左隣）にバッテリー残量を表示する。
 // pct: 0-100 = 残量%、-1 = 不明
 void lcd_status_battery(int pct) {

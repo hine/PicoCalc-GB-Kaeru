@@ -138,10 +138,25 @@ int kbd_set_backlight(uint8_t val) {
     uint8_t msg[2] = { 0x0A | 0x80, val };
 
     int ret = i2c_write_timeout_us(I2C_KBD_MOD, I2C_KBD_ADDR, msg, 2, false, 500000);
-    if (ret < 0) return -1;
-
+    if (ret < 0) {
+        i2c_init(I2C_KBD_MOD, I2C_KBD_SPEED);
+        gpio_set_function(I2C_KBD_SCL, GPIO_FUNC_I2C);
+        gpio_set_function(I2C_KBD_SDA, GPIO_FUNC_I2C);
+        gpio_pull_up(I2C_KBD_SCL);
+        gpio_pull_up(I2C_KBD_SDA);
+        return -1;
+    }
+    // STM32 は write 後に read フェーズを期待する。省略するとバスがスタックする。
     uint16_t buff = 0;
     sleep_ms(16);
-    i2c_read_timeout_us(I2C_KBD_MOD, I2C_KBD_ADDR, (uint8_t *)&buff, 2, false, 500000);
+    ret = i2c_read_timeout_us(I2C_KBD_MOD, I2C_KBD_ADDR, (uint8_t *)&buff, 2, false, 500000);
+    if (ret < 0) {
+        i2c_init(I2C_KBD_MOD, I2C_KBD_SPEED);
+        gpio_set_function(I2C_KBD_SCL, GPIO_FUNC_I2C);
+        gpio_set_function(I2C_KBD_SDA, GPIO_FUNC_I2C);
+        gpio_pull_up(I2C_KBD_SCL);
+        gpio_pull_up(I2C_KBD_SDA);
+        return -1;
+    }
     return 0;
 }

@@ -62,6 +62,10 @@ void lcd_menu_draw(const char *const items[], int n, int cursor);
 void lcd_menu_item_redraw(const char *label, int idx, bool selected);
 // フラッシュクリア確認ダイアログをメニューの上に描画する
 void lcd_menu_draw_confirm(void);
+// SD から Flash へ復元する確認ダイアログをメニューの上に描画する
+void lcd_menu_draw_sd_confirm(void);
+// 操作結果トーストをメニューの上に描画する（任意キーで閉じる旨を表示）
+void lcd_menu_draw_toast(const char *msg);
 
 #ifdef __cplusplus
 }

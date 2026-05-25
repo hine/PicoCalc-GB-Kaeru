@@ -49,6 +49,9 @@ bool     gb_core_consume_dirty(void); // dirty フラグを返してクリア（
 #define GB_AUDIO_SAMPLES_TOTAL (GB_AUDIO_SAMPLES * 2)
 void gb_core_fill_audio(int16_t *buf);
 
+// GB をソフトリセットする（ROM 再読み込みなし。SRAM は保持）。
+void gb_core_reset(void);
+
 // セーブステート: エミュレータ全体の状態（CPU・メモリ・APU）を直列化する。
 // buf は gb_core_state_size() バイト以上のバッファであること。
 size_t gb_core_state_size(void);

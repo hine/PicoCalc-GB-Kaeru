@@ -150,3 +150,9 @@ void gb_core_set_joypad(uint8_t joypad)
 {
     gb.direct.joypad = joypad;
 }
+
+void gb_core_reset(void)
+{
+    gb_reset(&gb);
+    minigb_apu_audio_init(&apu_ctx);
+}

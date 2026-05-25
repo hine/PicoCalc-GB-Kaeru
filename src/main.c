@@ -57,6 +57,7 @@ static volatile uint8_t g_function_key  = 0;
 static volatile int     g_menu_key      = 0;    // Core 1 → Core 0: 生キーコード
 static volatile uint8_t g_backlight_req = 128;  // Core 0 → Core 1: バックライト変更要求値
 static volatile bool    g_backlight_dirty = true; // true のとき Core 1 が kbd_set_backlight を呼ぶ
+static volatile bool    g_menu_active   = false; // true の間 Core 1 はフレーム描画をスキップ
 static bool             g_audio_enabled = true;  // Core 0 のみ読み書き（音声処理の有効/無効）
 
 // ── 音声 SPSC リングバッファ ──────────────────────────────────────────────────
@@ -161,11 +162,13 @@ static void core1_main(void) {
         if (g_lcd_busy) {
             int idx = g_lcd_fb_idx;  // バッファ番号を先にコピー
             mutex_enter_blocking(&g_lcd_mutex);
-            lcd_gb_frame_delta(g_fb[idx]);
-            // Core 0 が依頼した top テキストクリアも同じ SPI トランザクション内で処理
-            if (g_top_text_pending) {
-                lcd_status_top_text("        ");
-                g_top_text_pending = false;
+            if (!g_menu_active) {
+                lcd_gb_frame_delta(g_fb[idx]);
+                // Core 0 が依頼した top テキストクリアも同じ SPI トランザクション内で処理
+                if (g_top_text_pending) {
+                    lcd_status_top_text("        ");
+                    g_top_text_pending = false;
+                }
             }
             mutex_exit(&g_lcd_mutex);
             __dmb();
@@ -183,7 +186,7 @@ static void core1_main(void) {
             }
             if (pressed &&
                 (c == KEY_F1 || c == KEY_F2 || c == KEY_F3 || c == KEY_F4 ||
-                 c == KEY_ESC))
+                 c == KEY_F5 || c == KEY_ESC))
                 g_function_key = (uint8_t)c;
             if (pressed)
                 g_menu_key = c;  // Core 0 の menu_tick が消費する
@@ -392,9 +395,11 @@ int main()
                     mutex_enter_blocking(&g_lcd_mutex);
                     lcd_gb_frame_redraw(g_fb[g_lcd_fb_idx]);
                     mutex_exit(&g_lcd_mutex);
+                    g_menu_active = false;  // Core 1 のフレーム描画を再開
                     add_repeating_timer_us(-16743, frame_timer_cb, NULL, &frame_timer);
 
                 } else if (act == MENU_ACT_SRAM_TO_SD) {
+                    bool ok = false;
                     if (sd_mounted && gb_core_save_size() > 0) {
                         mutex_enter_blocking(&g_lcd_mutex);
                         lcd_status_storage_icon(STORAGE_ICON_SD);
@@ -404,9 +409,14 @@ int main()
                         mutex_enter_blocking(&g_lcd_mutex);
                         lcd_status_storage_icon(STORAGE_ICON_OFF);
                         mutex_exit(&g_lcd_mutex);
+                        ok = true;
                     }
+                    mutex_enter_blocking(&g_lcd_mutex);
+                    menu_show_toast(ok ? "Saved to SD!" : "No save data");
+                    mutex_exit(&g_lcd_mutex);
 
                 } else if (act == MENU_ACT_SD_TO_FLASH) {
+                    bool ok = false;
                     if (sd_mounted && gb_core_save_size() > 0) {
                         mutex_enter_blocking(&g_lcd_mutex);
                         lcd_status_storage_icon(STORAGE_ICON_READ);
@@ -420,11 +430,15 @@ int main()
                             multicore_lockout_start_blocking();
                             save_flash_sram_save(gb_core_cart_ram_ptr(), gb_core_save_size());
                             multicore_lockout_end_blocking();
+                            ok = true;
                         }
                         mutex_enter_blocking(&g_lcd_mutex);
                         lcd_status_storage_icon(STORAGE_ICON_OFF);
                         mutex_exit(&g_lcd_mutex);
                     }
+                    mutex_enter_blocking(&g_lcd_mutex);
+                    menu_show_toast(ok ? "Restored!" : "Load failed");
+                    mutex_exit(&g_lcd_mutex);
 
                 } else if (act == MENU_ACT_FLASH_CLEAR_EXEC) {
                     mutex_enter_blocking(&g_lcd_mutex);
@@ -505,12 +519,32 @@ int main()
             } else if (fkey == KEY_ESC) {
                 // メニューを開く（frame_timer を停止してゲームをポーズ）
                 cancel_repeating_timer(&frame_timer);
+                g_menu_active = true;  // Core 1 はフレームを描画しない
+                __dmb();
+                g_lcd_busy = false;    // 保留中のフレーム描画要求をキャンセル
                 mutex_enter_blocking(&g_lcd_mutex);
                 menu_open(g_fb[g_lcd_fb_idx],
                           (uint8_t)lcd_palette_get(),
                           g_audio_enabled ? 1 : 0,
                           g_backlight_req);
                 mutex_exit(&g_lcd_mutex);
+                continue;
+
+            } else if (fkey == KEY_F5) {
+                // ソフトリセット: GB エミュレータを再初期化して Flash の SRAM をリロード
+                g_lcd_busy = false;
+                sram_dirty_countdown = 0;
+                gb_core_reset();
+                gb_core_set_fb(g_fb[g_fb_write]);
+                gb_core_set_joypad(0xFF);
+                if (gb_core_save_size() > 0)
+                    save_flash_sram_load(gb_core_cart_ram_ptr(), gb_core_save_size());
+                lcd_gb_frame_invalidate();
+                mutex_enter_blocking(&g_lcd_mutex);
+                lcd_status_top_text("Reset   ");
+                mutex_exit(&g_lcd_mutex);
+                g_top_msg_ttl = 120;
+                g_top_text_pending = false;
 
             } else if (fkey == KEY_F4) {
                 // ロード: Flash の XIP 読み取りのみ → ロックアウト不要
