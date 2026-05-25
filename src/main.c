@@ -368,6 +368,13 @@ int main()
                 menu_action_t act = menu_tick(k);
                 mutex_exit(&g_lcd_mutex);
 
+                // バックライト変更を即座に Core 1 へ反映（プレビュー）
+                uint8_t cur_bl = menu_get_backlight();
+                if (cur_bl != g_backlight_req) {
+                    g_backlight_req   = cur_bl;
+                    g_backlight_dirty = true;
+                }
+
                 if (act == MENU_ACT_CLOSE) {
                     // 設定を Flash に保存してゲームを再開
                     multicore_lockout_start_blocking();

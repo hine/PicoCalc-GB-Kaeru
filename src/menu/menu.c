@@ -58,7 +58,7 @@ static menu_action_t handle_confirm(int key) {
         s_open    = false;
         return MENU_ACT_FLASH_CLEAR_EXEC;
     }
-    if (key == '.' || key == ']' || key == KEY_ESC) {
+    if (key == '.' || key == ']') {
         s_confirm = false;
         lcd_menu_draw(s_label_ptrs, N_ITEMS, s_cursor);
     }
@@ -121,7 +121,7 @@ menu_action_t menu_tick(int key) {
         lcd_menu_item_redraw(s_labels[s_cursor], s_cursor, true);
     } else if (key == ',' || key == '[' || key == KEY_ENTER) {
         return handle_select(s_cursor);
-    } else if (key == '.' || key == ']' || key == KEY_ESC) {
+    } else if (key == '.' || key == ']') {
         s_open = false;
         return MENU_ACT_CLOSE;
     }
